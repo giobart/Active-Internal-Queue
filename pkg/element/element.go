@@ -19,5 +19,6 @@ type Element struct {
 	Id                   string    `json:"Id"`
 	QoS                  int       `json:"QoS"`
 	ThresholdRequirement Threshold `json:"ThresholdRequirement"`
+	Timestamp            int64     `json:"timestamp"`
 	Data                 []byte    `json:"Data"`
 }

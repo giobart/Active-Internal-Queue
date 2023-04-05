@@ -1,4 +1,4 @@
-package strategies
+package insertStrategies
 
 import (
 	"errors"
@@ -20,11 +20,7 @@ type PushPopStrategyActuator interface {
 	Delete(index int, queue *[]*element.Element) error
 }
 
-type CleanStrategyActuator interface {
-	NextIndexToClean(queue *[]*element.Element) error
-}
-
-func StrategySelector(s Strategy) (PushPopStrategyActuator, error) {
+func InsertStrategySelector(s Strategy) (PushPopStrategyActuator, error) {
 	switch s {
 	case FIFO:
 		return &fifo{start: 0, end: 0}, nil

@@ -2,7 +2,7 @@ package queue
 
 import (
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
-	"github.com/giobart/Active-Internal-Queue/pkg/strategies"
+	"github.com/giobart/Active-Internal-Queue/pkg/insertStrategies"
 )
 
 const (
@@ -14,8 +14,8 @@ const (
 
 type Queue struct {
 	queue          []*element.Element
-	insertStrategy strategies.Strategy
-	removeStrategy strategies.Strategy
+	insertStrategy insertStrategies.PushPopStrategyActuator
+	removeStrategy int
 	length         int
 	minDequeue     int
 	nWorkers       int
@@ -36,9 +36,13 @@ func OptionQueueLength(length int) func(*Queue) error {
 	}
 }
 
-func OptionQueueStrategy(strategy strategies.Strategy) func(*Queue) error {
+func OptionQueueInsertStrategy(strategy insertStrategies.Strategy) func(*Queue) error {
 	return func(q *Queue) error {
-		q.queueStrategy = strategy
+		selector, err := insertStrategies.InsertStrategySelector(strategy)
+		if err != nil {
+			return err
+		}
+		q.insertStrategy = selector
 		return nil
 	}
 }
@@ -65,14 +69,15 @@ func OptionConcurrentWorkers(n int) func(queue *Queue) error {
 }
 
 func New(dequeueFunc func(el element.Element, batchId int), options ...func(*Queue) error) (ActiveInternalQueue, error) {
+	insertFifo, _ := insertStrategies.InsertStrategySelector(insertStrategies.FIFO)
 	queue := Queue{
-		queue:         make([]*element.Element, DefaultLength),
-		queueStrategy: strategies.FIFO,
-		length:        DefaultLength,
-		minDequeue:    DefaultMinDequeue,
-		nWorkers:      DefaultNWorkers,
-		maxDequeue:    DefaultMaxDequeue,
-		dequeueFunc:   dequeueFunc,
+		queue:          make([]*element.Element, DefaultLength),
+		insertStrategy: insertFifo,
+		length:         DefaultLength,
+		minDequeue:     DefaultMinDequeue,
+		nWorkers:       DefaultNWorkers,
+		maxDequeue:     DefaultMaxDequeue,
+		dequeueFunc:    dequeueFunc,
 	}
 
 	//parsing functional arguments

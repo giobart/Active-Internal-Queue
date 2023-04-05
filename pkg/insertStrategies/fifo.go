@@ -1,4 +1,4 @@
-package strategies
+package insertStrategies
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ type fifo struct {
 
 func (f *fifo) Push(el *element.Element, queue *[]*element.Element) error {
 	size := len(*queue)
-	if (f.end+1)%size >= f.start {
+	if f.end == f.start && f.count == size {
 		return errors.New("full")
 	}
 	(*queue)[f.end] = el
@@ -24,7 +24,7 @@ func (f *fifo) Push(el *element.Element, queue *[]*element.Element) error {
 
 func (f *fifo) Pop(queue *[]*element.Element) (*element.Element, error) {
 	size := len(*queue)
-	if (f.start-1)%size <= f.end {
+	if f.start == f.end && f.count == 0 {
 		return nil, errors.New("empty")
 	}
 	retvalue := (*queue)[f.start]
@@ -40,9 +40,9 @@ func (f *fifo) Delete(index int, queue *[]*element.Element) error {
 		return errors.New("out of bound")
 	}
 	if index >= f.start || index <= f.end {
-		(*queue)[f.start] = nil
+		(*queue)[index] = nil
 
-		for i := 0; i < f.count; i++ {
+		for i := 0; i <= f.count; i++ {
 			tmp, err := f.Pop(queue)
 			if err != nil {
 				return err
