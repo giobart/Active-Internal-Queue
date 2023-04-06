@@ -1,8 +1,11 @@
 package queue
 
 import (
+	"errors"
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
 	"github.com/giobart/Active-Internal-Queue/pkg/insertStrategies"
+	"github.com/giobart/Active-Internal-Queue/pkg/removeStrategies"
+	"time"
 )
 
 const (
@@ -15,17 +18,31 @@ const (
 type Queue struct {
 	queue          []*element.Element
 	insertStrategy insertStrategies.PushPopStrategyActuator
-	removeStrategy int
+	removeStrategy removeStrategies.RemoveStrategyActuator
+	batch          int64
 	length         int
+	inserted       int
 	minDequeue     int
 	nWorkers       int
 	maxDequeue     int
-	dequeueFunc    func(el element.Element, batchId int)
+	waitChannel    chan bool
+	dequeueFunc    func(el *element.Element)
+}
+
+type Analytics struct {
+	AvgPermanenceTime   int64 //expressed in milliseconds
+	EnqueueDequeueRatio int64 //<1 dequeue faster than enqueue, ==1 balanced, >1 enqueue faster than dequeue
+	Spaceleft           int   //0-100% value expressing the space lect
 }
 
 type ActiveInternalQueue interface {
+	// Enqueue Add an element to the queue
 	Enqueue(el element.Element) error
-	Finished(batchId int) error
+	// Dequeue Remove from the queue the next frame or waits until there is one.
+	// It calls "dequeueFunc" with the corresponding result
+	Dequeue()
+	// GetAnalytics obtain the internal queue analytics
+	GetAnalytics() Analytics
 }
 
 func OptionQueueLength(length int) func(*Queue) error {
@@ -36,7 +53,7 @@ func OptionQueueLength(length int) func(*Queue) error {
 	}
 }
 
-func OptionQueueInsertStrategy(strategy insertStrategies.Strategy) func(*Queue) error {
+func OptionQueueInsertStrategy(strategy insertStrategies.InsertStrategy) func(*Queue) error {
 	return func(q *Queue) error {
 		selector, err := insertStrategies.InsertStrategySelector(strategy)
 		if err != nil {
@@ -68,16 +85,19 @@ func OptionConcurrentWorkers(n int) func(queue *Queue) error {
 	}
 }
 
-func New(dequeueFunc func(el element.Element, batchId int), options ...func(*Queue) error) (ActiveInternalQueue, error) {
+func New(dequeueFunc func(el *element.Element), options ...func(*Queue) error) (ActiveInternalQueue, error) {
 	insertFifo, _ := insertStrategies.InsertStrategySelector(insertStrategies.FIFO)
+	removeOldest, _ := removeStrategies.RemoveStrategySelector(removeStrategies.CleanOldest)
 	queue := Queue{
 		queue:          make([]*element.Element, DefaultLength),
 		insertStrategy: insertFifo,
+		removeStrategy: removeOldest,
 		length:         DefaultLength,
 		minDequeue:     DefaultMinDequeue,
 		nWorkers:       DefaultNWorkers,
 		maxDequeue:     DefaultMaxDequeue,
 		dequeueFunc:    dequeueFunc,
+		waitChannel:    make(chan bool),
 	}
 
 	//parsing functional arguments
@@ -92,9 +112,53 @@ func New(dequeueFunc func(el element.Element, batchId int), options ...func(*Que
 }
 
 func (q *Queue) Enqueue(el element.Element) error {
+
+	if err := checkElement(el); err != nil {
+		return err
+	}
+
+	el.Timestamp = time.Now().UnixMilli()
+
+	//push element to queue
+	err := q.insertStrategy.Push(&el, &q.queue)
+	if err != nil {
+		//If queue is full, remove element accordingly to the remove strategy and try again
+		if errors.Is(err, &insertStrategies.FullQueue{}) {
+			victim, err := q.removeStrategy.FindVictim(&q.queue)
+			if err != nil {
+				return err
+			}
+			err = q.insertStrategy.Delete(victim, &q.queue)
+			if err != nil {
+				return err
+			}
+			q.inserted--
+			return q.Enqueue(el)
+		} else {
+			return err
+		}
+	}
+	q.inserted++
 	return nil
 }
 
-func (q *Queue) Finished(batchId int) error {
+func (q *Queue) Dequeue() {
+
+	element, err := q.insertStrategy.Pop(&q.queue)
+	if err != nil {
+
+	}
+	go q.dequeueFunc(element)
+	return
+}
+
+func (q *Queue) GetAnalytics() Analytics {
+	return Analytics{}
+}
+
+func checkElement(el element.Element) error {
+	if el.Id == "" {
+		return errors.New("empty element id")
+	}
 	return nil
 }

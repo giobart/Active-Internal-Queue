@@ -5,13 +5,13 @@ import (
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
 )
 
-type Strategy int
+type InsertStrategy int
 
 const (
-	FIFO          Strategy = iota
-	LIFO          Strategy = iota
-	ThresholdSort Strategy = iota
-	QoSAware      Strategy = iota
+	FIFO          InsertStrategy = iota
+	LIFO          InsertStrategy = iota
+	ThresholdSort InsertStrategy = iota
+	QoSAware      InsertStrategy = iota
 )
 
 type PushPopStrategyActuator interface {
@@ -20,7 +20,7 @@ type PushPopStrategyActuator interface {
 	Delete(index int, queue *[]*element.Element) error
 }
 
-func InsertStrategySelector(s Strategy) (PushPopStrategyActuator, error) {
+func InsertStrategySelector(s InsertStrategy) (PushPopStrategyActuator, error) {
 	switch s {
 	case FIFO:
 		return &fifo{start: 0, end: 0}, nil

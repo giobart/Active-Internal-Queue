@@ -14,7 +14,7 @@ type fifo struct {
 func (f *fifo) Push(el *element.Element, queue *[]*element.Element) error {
 	size := len(*queue)
 	if f.end == f.start && f.count == size {
-		return errors.New("full")
+		return &FullQueue{}
 	}
 	(*queue)[f.end] = el
 	f.end = (f.end + 1) % size
@@ -25,7 +25,7 @@ func (f *fifo) Push(el *element.Element, queue *[]*element.Element) error {
 func (f *fifo) Pop(queue *[]*element.Element) (*element.Element, error) {
 	size := len(*queue)
 	if f.start == f.end && f.count == 0 {
-		return nil, errors.New("empty")
+		return nil, &EmptyQueue{}
 	}
 	retvalue := (*queue)[f.start]
 	(*queue)[f.start] = nil
