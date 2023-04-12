@@ -5,6 +5,7 @@ import (
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
 	"github.com/giobart/Active-Internal-Queue/pkg/insertStrategies"
 	"github.com/giobart/Active-Internal-Queue/pkg/removeStrategies"
+	"sync"
 	"time"
 )
 
@@ -16,17 +17,19 @@ const (
 )
 
 type Queue struct {
-	queue          []*element.Element
-	insertStrategy insertStrategies.PushPopStrategyActuator
-	removeStrategy removeStrategies.RemoveStrategyActuator
-	batch          int64
-	length         int
-	inserted       int
-	minDequeue     int
-	nWorkers       int
-	maxDequeue     int
-	waitChannel    chan bool
-	dequeueFunc    func(el *element.Element)
+	queue              []*element.Element
+	insertStrategy     insertStrategies.PushPopStrategyActuator
+	removeStrategy     removeStrategies.RemoveStrategyActuator
+	batch              int64
+	length             int
+	inserted           int
+	minDequeue         int
+	nWorkers           int
+	maxDequeue         int
+	dequeueWaitChannel chan *element.Element
+	dequeueFunc        func(el *element.Element)
+	rwlock             sync.Mutex
+	daqueueWaiting     int //number of dequeue functions waiting to be executed
 }
 
 type Analytics struct {
@@ -89,15 +92,15 @@ func New(dequeueFunc func(el *element.Element), options ...func(*Queue) error) (
 	insertFifo, _ := insertStrategies.InsertStrategySelector(insertStrategies.FIFO)
 	removeOldest, _ := removeStrategies.RemoveStrategySelector(removeStrategies.CleanOldest)
 	queue := Queue{
-		queue:          make([]*element.Element, DefaultLength),
-		insertStrategy: insertFifo,
-		removeStrategy: removeOldest,
-		length:         DefaultLength,
-		minDequeue:     DefaultMinDequeue,
-		nWorkers:       DefaultNWorkers,
-		maxDequeue:     DefaultMaxDequeue,
-		dequeueFunc:    dequeueFunc,
-		waitChannel:    make(chan bool),
+		queue:              make([]*element.Element, DefaultLength),
+		insertStrategy:     insertFifo,
+		removeStrategy:     removeOldest,
+		length:             DefaultLength,
+		minDequeue:         DefaultMinDequeue,
+		nWorkers:           DefaultNWorkers,
+		maxDequeue:         DefaultMaxDequeue,
+		dequeueFunc:        dequeueFunc,
+		dequeueWaitChannel: make(chan *element.Element, 100),
 	}
 
 	//parsing functional arguments
@@ -108,16 +111,35 @@ func New(dequeueFunc func(el *element.Element), options ...func(*Queue) error) (
 		}
 	}
 
+	//set an async goroutine to handle the dequeue function call to avoid blocking the thread
+	go func() {
+		for true {
+			select {
+			case returnElement := <-queue.dequeueWaitChannel:
+				queue.dequeueFunc(returnElement)
+			}
+		}
+	}()
+
 	return &queue, nil
 }
 
 func (q *Queue) Enqueue(el element.Element) error {
+
+	q.rwlock.Lock()
+	defer q.rwlock.Unlock()
 
 	if err := checkElement(el); err != nil {
 		return err
 	}
 
 	el.Timestamp = time.Now().UnixMilli()
+
+	//If dequeue function is waiting then immediately return the item
+	if q.daqueueWaiting >= 0 {
+		q.daqueueWaiting--
+		q.dequeueFunc(&el)
+	}
 
 	//push element to queue
 	err := q.insertStrategy.Push(&el, &q.queue)
@@ -144,12 +166,21 @@ func (q *Queue) Enqueue(el element.Element) error {
 
 func (q *Queue) Dequeue() {
 
-	element, err := q.insertStrategy.Pop(&q.queue)
-	if err != nil {
+	q.rwlock.Lock()
+	defer q.rwlock.Unlock()
 
+	returnElement, err := q.insertStrategy.Pop(&q.queue)
+	if err != nil {
+		q.daqueueWaiting = q.daqueueWaiting + 1
+		return
 	}
-	go q.dequeueFunc(element)
+	q.callDequeueFunction(returnElement)
 	return
+}
+
+func (q *Queue) callDequeueFunction(el *element.Element) {
+	q.dequeueWaitChannel <- el
+	//TODO: dequeue analytics go here
 }
 
 func (q *Queue) GetAnalytics() Analytics {
