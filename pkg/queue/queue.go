@@ -30,6 +30,7 @@ type Queue struct {
 	dequeueFunc        func(el *element.Element)
 	rwlock             sync.Mutex
 	daqueueWaiting     int //number of dequeue functions waiting to be executed
+	analyticsService   AnalyticsGenerator
 }
 
 type ActiveInternalQueue interface {
@@ -82,6 +83,13 @@ func OptionConcurrentWorkers(n int) func(queue *Queue) error {
 	}
 }
 
+func OptionSetAnalyticsService(windowSize int) func(queue *Queue) error {
+	return func(q *Queue) error {
+		q.analyticsService = NewAnalyticsGenerator(windowSize, len(q.queue))
+		return nil
+	}
+}
+
 func New(dequeueFunc func(el *element.Element), options ...func(*Queue) error) (ActiveInternalQueue, error) {
 	insertFifo, _ := insertStrategies.InsertStrategySelector(insertStrategies.FIFO)
 	removeOldest, _ := removeStrategies.RemoveStrategySelector(removeStrategies.CleanOldest)
@@ -95,6 +103,7 @@ func New(dequeueFunc func(el *element.Element), options ...func(*Queue) error) (
 		maxDequeue:         DefaultMaxDequeue,
 		dequeueFunc:        dequeueFunc,
 		dequeueWaitChannel: make(chan *element.Element, 100),
+		analyticsService:   nil,
 	}
 
 	//parsing functional arguments
@@ -154,7 +163,16 @@ func (q *Queue) Enqueue(el element.Element) error {
 			return err
 		}
 	}
+
+	// update number of inserted elements
 	q.inserted++
+
+	//notify the analytics service
+	if q.analyticsService != nil {
+		q.analyticsService.NotifyInsertion()
+		q.analyticsService.NotifyCurrentSpace(q.inserted)
+	}
+
 	return nil
 }
 
@@ -163,21 +181,37 @@ func (q *Queue) Dequeue() {
 	q.rwlock.Lock()
 	defer q.rwlock.Unlock()
 
+	// try to fetch the element
 	returnElement, err := q.insertStrategy.Pop(&q.queue)
 	if err != nil {
+		// if no element available update the waiting queue. New elements will be returned immediately
 		q.daqueueWaiting = q.daqueueWaiting + 1
 		return
 	}
+
+	// update queue size
+	q.inserted--
+
+	// notify analytics
+	if q.analyticsService != nil {
+		q.analyticsService.NotifyCurrentSpace(q.inserted)
+		q.analyticsService.NotifyDeletion(returnElement.Timestamp)
+	}
+
+	// async call to dequeue function
 	q.callDequeueFunction(returnElement)
+
 	return
 }
 
 func (q *Queue) callDequeueFunction(el *element.Element) {
 	q.dequeueWaitChannel <- el
-	//TODO: dequeue analytics go here
 }
 
 func (q *Queue) GetAnalytics() Analytics {
+	if q.analyticsService != nil {
+		return q.analyticsService.GetAnalytics()
+	}
 	return Analytics{}
 }
 

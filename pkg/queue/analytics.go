@@ -20,7 +20,7 @@ type Analytics struct {
 type AnalyticsGenerator interface {
 	NotifyInsertion()
 	NotifyDeletion(previousInsertionTime int64)
-	NotifyCurrentSpace()
+	NotifyCurrentSpace(numberOfStoredElements int)
 	GetAnalytics() Analytics
 }
 
@@ -59,8 +59,8 @@ func (a *Analytics) NotifyCurrentSpace(numberOfStoredElements int) {
 	a.SpaceLeft = int(numberOfStoredElements * 100 / a.maxQueueSize)
 }
 
-// UpdateAnalytics calculate the analytics and returns the results
-func (a *Analytics) UpdateAnalytics() Analytics {
+// GetAnalytics calculate the analytics and returns the results
+func (a *Analytics) GetAnalytics() Analytics {
 	a.AvgPermanenceTime = 0
 	a.EnqueueDequeueRatio = 0
 	a.avgDeltaInsertionTime = 0
