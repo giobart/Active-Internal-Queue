@@ -32,12 +32,6 @@ type Queue struct {
 	daqueueWaiting     int //number of dequeue functions waiting to be executed
 }
 
-type Analytics struct {
-	AvgPermanenceTime   int64 //expressed in milliseconds
-	EnqueueDequeueRatio int64 //<1 dequeue faster than enqueue, ==1 balanced, >1 enqueue faster than dequeue
-	Spaceleft           int   //0-100% value expressing the space lect
-}
-
 type ActiveInternalQueue interface {
 	// Enqueue Add an element to the queue
 	Enqueue(el element.Element) error
@@ -138,7 +132,7 @@ func (q *Queue) Enqueue(el element.Element) error {
 	//If dequeue function is waiting then immediately return the item
 	if q.daqueueWaiting >= 0 {
 		q.daqueueWaiting--
-		q.dequeueFunc(&el)
+		q.callDequeueFunction(&el)
 	}
 
 	//push element to queue
