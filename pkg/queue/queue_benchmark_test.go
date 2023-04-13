@@ -38,7 +38,7 @@ func BenchmarkMaxSpeed(t *testing.B) {
 				println("#### Benchmark iteration n,", i, " #####")
 				println("Avg Queue Time: (ns)", analytics.AvgPermanenceTime)
 				println("EnqueueDequeue Ratio: ", analytics.EnqueueDequeueRatio)
-				println("Space left: %", analytics.SpaceFull)
+				println("Space full: %", analytics.SpaceFull)
 			}
 		}
 	}
@@ -62,7 +62,7 @@ func BenchmarkMaxSpeed(t *testing.B) {
 	println("#### Benchmark Results ####")
 	println("Avg Queue Time: (ns)", analytics.AvgPermanenceTime)
 	println("EnqueueDequeue Ratio: ", analytics.EnqueueDequeueRatio)
-	println("Final Space left: %", analytics.SpaceFull)
+	println("Final Space full: %", analytics.SpaceFull)
 	println("Total time: (ns)", end-begin)
 }
 
@@ -123,7 +123,8 @@ func Benchmark30Fps(t *testing.B) {
 	println("Total time: (ns)", end-begin)
 }
 
-func Benchmark30FpsUdpSockets(t *testing.B) {
+func BenchmarkUdpSockets(t *testing.B) {
+
 	finished := make(chan bool)
 
 	//thread that simulates an external application receiving and sending udp frames
@@ -139,40 +140,37 @@ func Benchmark30FpsUdpSockets(t *testing.B) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer externalAppListener.Close()
 	externalUdpSocketApplication := func() {
-
 		b := make([]byte, 7000)
 		for {
 			n, _, err := externalAppListener.ReadFromUDP(b)
 			if err != nil {
-				t.Fatal(err)
+				//closed listernet, function finished
+				return
 			}
 			_, _ = externalAppconn.Write(b[:n])
 		}
 	}
 
 	//dequeue function sending the frames to the external application
+	dequeueConn, err := net.Dial("udp", "0.0.0.0:50505")
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
 	deqFunc := func(el *element.Element) {
-		conn, err := net.Dial("udp", "0.0.0.0:50505")
-		if err != nil {
-			t.Fatal(err)
-			return
-		}
 		msg, err := json.Marshal(el)
-		_, err = conn.Write(msg)
+		_, err = dequeueConn.Write(msg)
 		if err != nil {
 			t.Fatal(err)
 		}
-		conn.Close()
 	}
 
 	myQueue, _ := New(deqFunc, OptionSetAnalyticsService(100), OptionQueueLength(1000))
 
 	//thread that generates 30 frames per second with size 4KiB for the queue
 	enqueueThread := func() {
-		time.Sleep(time.Millisecond * 100)
-		for i := 0; i < 300; i++ {
+		for i := 0; i < 500; i++ {
 			data := make([]byte, 4096) //4096 KiB long data
 			rand.Read(data)
 			err := myQueue.Enqueue(element.Element{
@@ -190,10 +188,10 @@ func Benchmark30FpsUdpSockets(t *testing.B) {
 				analytics := myQueue.GetAnalytics()
 				println("#### Benchmark iteration n,", i, " #####")
 				println("Avg Queue Time: (ns)", analytics.AvgPermanenceTime)
-				println("EnqueueDequeue Ratio: ", analytics.EnqueueDequeueRatio)
+				println("EnqueueDequeue Ratio ", analytics.EnqueueDequeueRatio)
 				println("Space occupied: %", analytics.SpaceFull)
 			}
-			time.Sleep(time.Millisecond * 1) //1000FPS
+			//time.Sleep(time.Millisecond * 1) //1000FPS
 		}
 	}
 
@@ -209,7 +207,7 @@ func Benchmark30FpsUdpSockets(t *testing.B) {
 			t.Fatal(err)
 		}
 		b := make([]byte, 7000)
-		for i := 0; i < 300; i++ {
+		for i := 0; i < 500; i++ {
 			myQueue.Dequeue()
 			n, _, err := l.ReadFromUDP(b)
 			if err != nil {
@@ -223,18 +221,27 @@ func Benchmark30FpsUdpSockets(t *testing.B) {
 		finished <- true
 	}
 
+	t.ResetTimer()
 	begin := time.Now().UnixNano()
 	go dequeueThread()
 	go enqueueThread()
 	go externalUdpSocketApplication()
 	<-finished
+	dequeueConn.Close()
+	externalAppListener.Close()
+	externalAppconn.Close()
 	end := time.Now().UnixNano()
 
 	analytics := myQueue.GetAnalytics()
 
-	println("#### Benchmark Results ####")
-	println("Avg Queue Time: (ns)", analytics.AvgPermanenceTime)
-	println("EnqueueDequeue Ratio: ", analytics.EnqueueDequeueRatio)
-	println("Final Space occupied: %", analytics.SpaceFull)
+	//println("#### Benchmark Results ####")
+	//println("Avg Queue Time: (ns)", analytics.AvgPermanenceTime)
+	//println("EnqueueDequeue Ratio: ", analytics.EnqueueDequeueRatio)
+	//println("Final Space occupied: %", analytics.SpaceFull)
 	println("Total time: (ns)", end-begin)
+	t.ReportMetric(float64(analytics.AvgPermanenceTime)/float64(t.N), "Avg-Queue-Time")
+	t.ReportMetric(float64(analytics.EnqueueDequeueRatio)/float64(t.N), "EnqueueDequeue-Ratio")
+	t.ReportMetric(float64(analytics.SpaceFull)/float64(t.N), "Space-occupied")
+	t.ReportMetric(float64(end-begin)/float64(t.N), "Total-time")
+
 }
