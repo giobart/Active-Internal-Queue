@@ -85,7 +85,7 @@ func OptionConcurrentWorkers(n int) func(queue *Queue) error {
 
 func OptionSetAnalyticsService(windowSize int) func(queue *Queue) error {
 	return func(q *Queue) error {
-		q.analyticsService = NewAnalyticsGenerator(windowSize, len(q.queue))
+		q.analyticsService = NewAnalyticsGenerator(windowSize)
 		return nil
 	}
 }
@@ -136,12 +136,13 @@ func (q *Queue) Enqueue(el element.Element) error {
 		return err
 	}
 
-	el.Timestamp = time.Now().UnixMilli()
+	el.Timestamp = time.Now().UnixNano()
 
 	//If dequeue function is waiting then immediately return the item
-	if q.daqueueWaiting >= 0 {
+	if q.daqueueWaiting > 0 {
 		q.daqueueWaiting--
 		q.callDequeueFunction(&el)
+		return nil
 	}
 
 	//push element to queue
@@ -158,7 +159,10 @@ func (q *Queue) Enqueue(el element.Element) error {
 				return err
 			}
 			q.inserted--
-			return q.Enqueue(el)
+			q.rwlock.Unlock()
+			err = q.Enqueue(el)
+			q.rwlock.Lock()
+			return err
 		} else {
 			return err
 		}
@@ -170,7 +174,7 @@ func (q *Queue) Enqueue(el element.Element) error {
 	//notify the analytics service
 	if q.analyticsService != nil {
 		q.analyticsService.NotifyInsertion()
-		q.analyticsService.NotifyCurrentSpace(q.inserted)
+		q.analyticsService.NotifyCurrentSpace(q.inserted, q.length)
 	}
 
 	return nil
@@ -194,7 +198,7 @@ func (q *Queue) Dequeue() {
 
 	// notify analytics
 	if q.analyticsService != nil {
-		q.analyticsService.NotifyCurrentSpace(q.inserted)
+		q.analyticsService.NotifyCurrentSpace(q.inserted, q.length)
 		q.analyticsService.NotifyDeletion(returnElement.Timestamp)
 	}
 

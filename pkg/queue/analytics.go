@@ -7,7 +7,7 @@ import (
 type Analytics struct {
 	AvgPermanenceTime        int64 //expressed in milliseconds
 	EnqueueDequeueRatio      int   //<1 dequeue faster than enqueue, ==1 balanced, >1 enqueue faster than dequeue
-	SpaceLeft                int   //0-100% value expressing the space lect
+	SpaceFull                int   //0-100% value expressing the space lect
 	deltaInsertionTime       []int64
 	deltaPermanenceTime      []int64
 	avgDeltaInsertionTime    int64
@@ -20,25 +20,25 @@ type Analytics struct {
 type AnalyticsGenerator interface {
 	NotifyInsertion()
 	NotifyDeletion(previousInsertionTime int64)
-	NotifyCurrentSpace(numberOfStoredElements int)
+	NotifyCurrentSpace(numberOfStoredElements int, maxSize int)
 	GetAnalytics() Analytics
 }
 
 // NewAnalyticsGenerator create new analytics structure with window size
-func NewAnalyticsGenerator(windowSize int, maxQueueSize int) *Analytics {
+func NewAnalyticsGenerator(windowSize int) *Analytics {
 	return &Analytics{
 		AvgPermanenceTime:   0,
 		EnqueueDequeueRatio: 0,
-		SpaceLeft:           0,
+		SpaceFull:           0,
 		deltaInsertionTime:  make([]int64, windowSize),
 		deltaPermanenceTime: make([]int64, windowSize),
-		maxQueueSize:        maxQueueSize,
+		maxQueueSize:        0,
 	}
 }
 
 // NotifyInsertion used no
 func (a *Analytics) NotifyInsertion() {
-	now := time.Now().UnixMilli()
+	now := time.Now().UnixNano()
 	if a.lastInsertionTime != 0 {
 		a.deltaInsertionTime[a.nextInsertionTimeIndex] = now - a.lastInsertionTime
 		a.nextInsertionTimeIndex = (a.nextInsertionTimeIndex + 1) % len(a.deltaInsertionTime)
@@ -49,14 +49,14 @@ func (a *Analytics) NotifyInsertion() {
 // NotifyDeletion used to notify that an item was removed from the queue.
 // It requires the former insertion time to keep track of the avg permanence time in the queue
 func (a *Analytics) NotifyDeletion(previousInsertionTime int64) {
-	deltaPermanenceTime := time.Now().UnixMilli() - previousInsertionTime
+	deltaPermanenceTime := time.Now().UnixNano() - previousInsertionTime
 	a.deltaPermanenceTime[a.nextDeltaPermanenceIndex] = deltaPermanenceTime
 	a.nextDeltaPermanenceIndex = (a.nextDeltaPermanenceIndex + 1) % len(a.deltaPermanenceTime)
 
 }
 
-func (a *Analytics) NotifyCurrentSpace(numberOfStoredElements int) {
-	a.SpaceLeft = int(numberOfStoredElements * 100 / a.maxQueueSize)
+func (a *Analytics) NotifyCurrentSpace(numberOfStoredElements int, maxSize int) {
+	a.SpaceFull = int(numberOfStoredElements * 100 / maxSize)
 }
 
 // GetAnalytics calculate the analytics and returns the results
@@ -72,7 +72,11 @@ func (a *Analytics) GetAnalytics() Analytics {
 	a.avgDeltaInsertionTime = calcAvg(&a.deltaInsertionTime)
 
 	// calc queuedequeueratio
-	a.EnqueueDequeueRatio = int(a.AvgPermanenceTime / a.avgDeltaInsertionTime)
+	if a.avgDeltaInsertionTime == 0 {
+		a.EnqueueDequeueRatio = 1
+	} else {
+		a.EnqueueDequeueRatio = int(a.AvgPermanenceTime / a.avgDeltaInsertionTime)
+	}
 
 	return *a
 }
