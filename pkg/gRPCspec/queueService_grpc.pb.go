@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.8
-// source: frame.proto
+// source: queueService.proto
 
 package gRPCspec
 
@@ -103,5 +103,5 @@ var QueueService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "frame.proto",
+	Metadata: "queueService.proto",
 }

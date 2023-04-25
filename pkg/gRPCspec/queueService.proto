@@ -13,5 +13,5 @@ message Frame {
   string client = 1;
   string id = 2;
   string qos = 3;
-  bytes data = 4;
+  bytes data = 4; // generic data byte array containing the expected input and output data of the AR Service
 }
