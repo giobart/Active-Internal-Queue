@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"github.com/giobart/Active-Internal-Queue/cmd/SidecarQueue/streamgRPCspec"
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
@@ -11,11 +12,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"log"
 	"net"
+	"strconv"
 	"time"
 )
 
-var NextService = ""
 var QueueService queue.ActiveInternalQueue
+var BUFFER_SIZE = 64 * 1024
+
+var NextService = flag.String("a", "localhost:50555", "Address of the next service in the pipeline")
+var ServicePort = flag.String("p", "", "port that will be exposed to receive the frames")
+var isEntrypoint = flag.Bool("entry", false, "If True, this is an entrypoint, and frames will be received from the UDP socket")
+var isExitpoint = flag.Bool("exit", false, "If True, this is an exitpoint, no next service will be used, but frames will be sent back to the client using the client address")
 
 type StreamServer struct {
 	streamgRPCspec.UnimplementedFramesStreamServiceServer
@@ -23,6 +30,7 @@ type StreamServer struct {
 
 func main() {
 
+	flag.Parse()
 	quit := make(chan bool, 0)
 	generatedQueue := make(chan queue.ActiveInternalQueue, 0)
 	framesChan := make(chan element.Element, 5)
@@ -30,9 +38,14 @@ func main() {
 	go startQueueClient(quit, generatedQueue, 50505, framesChan)
 	queue := <-generatedQueue
 	//starting processing and forwarding gRPC client
-	go ProcessFrame(framesChan, queue.Dequeue)
-	//starting receive gRPC routine
-	go ReceiveFrameGrpcRoutine()
+	go ProcessOutgoingFrames(framesChan, queue.Dequeue)
+	if *isEntrypoint {
+		//if this service is an entrypoint, then receive the frames directly from the client using UDP
+		go ReceiveUDPFrameRoutine()
+	} else {
+		//starting receive gRPC routine
+		go ReceiveFrameGrpcRoutine()
+	}
 
 }
 
@@ -80,15 +93,47 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 	cancel()
 }
 
-// ### Frame Forwarding Client ####
+// ### Forward frames to next service ####
 
-func ProcessFrame(frames chan element.Element, dequeue func()) {
+func ProcessOutgoingFrames(frames chan element.Element, dequeue func()) {
 	sendFramesChan := make(chan element.Element, 10)
-	go SendFrameGrpcRoutine(NextService, sendFramesChan)
+	if *isExitpoint {
+		// if this is the expitpoint the frames must be sent to the UDP socket instead of the gRPC channel for the next service
+		go SendFramesToClientRoutine(sendFramesChan)
+	} else {
+		go SendFrameGrpcRoutine(*NextService, sendFramesChan)
+	}
 	for true {
 		frame := <-frames
 		dequeue()
 		sendFramesChan <- frame
+	}
+}
+
+func SendFramesToClientRoutine(frames chan element.Element) {
+	connectionBuffer := make(map[string]*net.UDPConn, 100)
+	for true {
+		frame := <-frames
+		connection, exist := connectionBuffer[frame.Client]
+		if !exist {
+			raddr, err := net.ResolveUDPAddr("udp", frame.Client)
+			if err != nil {
+				log.Println("Unable to send udp packet")
+				continue
+			}
+			connection, err = net.DialUDP("udp", nil, raddr)
+			if err != nil {
+				log.Println("Unable to send udp packet")
+				continue
+			}
+			connectionBuffer[frame.Client] = connection
+		}
+		_, _, err := (*connection).WriteMsgUDP(frame.Data, nil, nil)
+		if err != nil {
+			connectionBuffer[frame.Client] = nil
+			log.Println("Unable to complete udp write to packet")
+			continue
+		}
 	}
 }
 
@@ -161,4 +206,43 @@ func (s StreamServer) StreamFrames(frame *streamgRPCspec.Frame, stream streamgRP
 		}
 	}
 	return nil
+}
+
+func ReceiveUDPFrameRoutine() {
+	buffer := make([]byte, BUFFER_SIZE)
+	port, err := strconv.Atoi(*ServicePort)
+	if err != nil {
+		log.Fatal(err)
+	}
+	udpListenAddr := net.UDPAddr{
+		IP:   net.IP("0.0.0.0"),
+		Port: port,
+	}
+	conn, err := net.ListenUDP("udp", &udpListenAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for true {
+		packet := buffer
+		n, from, err := conn.ReadFromUDP(packet)
+		if err != nil {
+			log.Println("Invalid upd message received")
+			continue
+		}
+		data := make([]byte, n)
+		copy(data, buffer[:n])
+		frame := element.Element{
+			Client:               from.String(),
+			Id:                   "1",
+			QoS:                  0,
+			ThresholdRequirement: element.Threshold{},
+			Data:                 data,
+		}
+		err = QueueService.Enqueue(frame)
+		if err != nil {
+			log.Println("Impossible to queue the element. Queue Error")
+			log.Println(err)
+			continue
+		}
+	}
 }
