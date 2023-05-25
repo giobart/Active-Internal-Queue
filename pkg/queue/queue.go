@@ -205,7 +205,7 @@ func (q *Queue) Dequeue() {
 	//if threshold requirements not met discard element
 	isThresholdValid := checkAndUpdateThreshold(returnElement)
 	if !isThresholdValid {
-		defer q.Dequeue()
+		go q.Dequeue()
 		return
 	}
 

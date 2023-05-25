@@ -29,12 +29,16 @@ func BenchmarkMaxSpeed(t *testing.B) {
 	enqueueThread := func() {
 		for i := 0; i < 1000; i++ {
 			err := myQueue.Enqueue(element.Element{
-				Client:               strconv.Itoa(i),
-				Id:                   strconv.Itoa(i),
-				QoS:                  0,
-				ThresholdRequirement: element.Threshold{},
-				Timestamp:            0,
-				Data:                 []byte("test"),
+				Client: strconv.Itoa(i),
+				Id:     strconv.Itoa(i),
+				QoS:    0,
+				ThresholdRequirement: element.Threshold{
+					Type:      element.MaxLatency,
+					Current:   0,
+					Threshold: 200,
+				},
+				Timestamp: 0,
+				Data:      []byte("test"),
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -93,7 +97,7 @@ func BenchmarkDequeue500gRPC(t *testing.B) {
 			Client:               r.Client,
 			Id:                   r.Id,
 			QoS:                  0,
-			ThresholdRequirement: element.Threshold{},
+			ThresholdRequirement: el.ThresholdRequirement,
 			Timestamp:            0,
 			Data:                 r.Data,
 		}
@@ -107,12 +111,16 @@ func BenchmarkDequeue500gRPC(t *testing.B) {
 			data := make([]byte, 8192) //8192 KiB long data
 			rand.Read(data)
 			err := myQueue.Enqueue(element.Element{
-				Client:               strconv.Itoa(i),
-				Id:                   strconv.Itoa(i),
-				QoS:                  0,
-				ThresholdRequirement: element.Threshold{},
-				Timestamp:            0,
-				Data:                 data,
+				Client: strconv.Itoa(i),
+				Id:     strconv.Itoa(i),
+				QoS:    0,
+				ThresholdRequirement: element.Threshold{
+					Type:      element.MaxLatency,
+					Current:   0,
+					Threshold: 200,
+				},
+				Timestamp: 0,
+				Data:      data,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -206,12 +214,16 @@ func BenchmarkDequeue500UDP(t *testing.B) {
 			data := make([]byte, 8192) //8192 KiB long data
 			rand.Read(data)
 			err := myQueue.Enqueue(element.Element{
-				Client:               strconv.Itoa(i),
-				Id:                   strconv.Itoa(i),
-				QoS:                  0,
-				ThresholdRequirement: element.Threshold{},
-				Timestamp:            0,
-				Data:                 data,
+				Client: strconv.Itoa(i),
+				Id:     strconv.Itoa(i),
+				QoS:    0,
+				ThresholdRequirement: element.Threshold{
+					Type:      element.MaxLatency,
+					Current:   0,
+					Threshold: 200,
+				},
+				Timestamp: 0,
+				Data:      data,
 			})
 			if err != nil {
 				t.Fatal(err)
