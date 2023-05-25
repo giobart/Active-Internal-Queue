@@ -5,21 +5,26 @@ import (
 )
 
 type Analytics struct {
-	AvgPermanenceTime        int64 //expressed in milliseconds
-	EnqueueDequeueRatio      int   //<1 dequeue faster than enqueue, ==1 balanced, >1 enqueue faster than dequeue
-	SpaceFull                int   //0-100% value expressing the space lect
+	AvgPermanenceTime        int64   //expressed in milliseconds
+	EnqueueDequeueRatio      int     //<1 dequeue faster than enqueue, ==1 balanced, >1 enqueue faster than dequeue
+	SpaceFull                int     //0-100% value expressing the space lect
+	ThresholdRatio           float64 //0-1 value representing (N.Thresholded values/Tot number of deletion)
 	deltaInsertionTime       []int64
 	deltaPermanenceTime      []int64
 	avgDeltaInsertionTime    int64
 	lastInsertionTime        int64
 	nextDeltaPermanenceIndex int
 	nextInsertionTimeIndex   int
+	totDeleted               int
+	totThreshold             int
 	maxQueueSize             int
+	windowSize               int
 }
 
 type AnalyticsGenerator interface {
 	NotifyInsertion()
 	NotifyDeletion(previousInsertionTime int64)
+	NotifyThreshold()
 	NotifyCurrentSpace(numberOfStoredElements int, maxSize int)
 	GetAnalytics() Analytics
 }
@@ -33,6 +38,7 @@ func NewAnalyticsGenerator(windowSize int) *Analytics {
 		deltaInsertionTime:  make([]int64, windowSize),
 		deltaPermanenceTime: make([]int64, windowSize),
 		maxQueueSize:        0,
+		windowSize:          windowSize,
 	}
 }
 
@@ -52,7 +58,7 @@ func (a *Analytics) NotifyDeletion(previousInsertionTime int64) {
 	deltaPermanenceTime := time.Now().UnixNano() - previousInsertionTime
 	a.deltaPermanenceTime[a.nextDeltaPermanenceIndex] = deltaPermanenceTime
 	a.nextDeltaPermanenceIndex = (a.nextDeltaPermanenceIndex + 1) % len(a.deltaPermanenceTime)
-
+	a.addDeleted()
 }
 
 func (a *Analytics) NotifyCurrentSpace(numberOfStoredElements int, maxSize int) {
@@ -78,6 +84,9 @@ func (a *Analytics) GetAnalytics() Analytics {
 		a.EnqueueDequeueRatio = int(a.AvgPermanenceTime / a.avgDeltaInsertionTime)
 	}
 
+	//calc threshold
+	a.ThresholdRatio = float64(float64(a.totThreshold) / float64(a.totDeleted))
+
 	return *a
 }
 
@@ -95,4 +104,20 @@ func calcAvg(arr *[]int64) int64 {
 		avg = avg / int64(avgItems)
 	}
 	return avg
+}
+
+func (a *Analytics) addDeleted() {
+	a.totDeleted++
+	if a.totDeleted > a.windowSize {
+		a.totDeleted = a.totDeleted / 2
+		a.totThreshold = a.totThreshold / 2
+	}
+}
+
+func (a *Analytics) NotifyThreshold() {
+	a.totThreshold++
+	if a.totThreshold > a.windowSize {
+		a.totDeleted = a.totDeleted / 2
+		a.totThreshold = a.totThreshold / 2
+	}
 }

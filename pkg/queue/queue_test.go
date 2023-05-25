@@ -2,6 +2,7 @@ package queue
 
 import (
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
+	"log"
 	"strconv"
 	"testing"
 	"time"
@@ -93,7 +94,7 @@ func TestQueue_ThresholdLatency(t *testing.T) {
 		dequeueNext <- intId
 	}
 
-	myQueue, _ := New(deqFunc, OptionQueueLength(100))
+	myQueue, _ := New(deqFunc, OptionQueueLength(100), OptionSetAnalyticsService(20))
 
 	enqueueThread := func() {
 		time.Sleep(time.Millisecond)
@@ -127,4 +128,8 @@ func TestQueue_ThresholdLatency(t *testing.T) {
 	go dequeueThread()
 	go enqueueThread()
 	<-finished
+	analytics := myQueue.GetAnalytics()
+	if analytics.ThresholdRatio != 0.5 {
+		log.Fatalln("Threshold ratio should be 0.5, current ratio: ", analytics.ThresholdRatio)
+	}
 }

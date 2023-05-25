@@ -205,6 +205,7 @@ func (q *Queue) Dequeue() {
 	//if threshold requirements not met discard element
 	isThresholdValid := checkAndUpdateThreshold(returnElement)
 	if !isThresholdValid {
+		q.analyticsService.NotifyThreshold()
 		go q.Dequeue()
 		return
 	}
