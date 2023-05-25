@@ -22,8 +22,9 @@ import (
 var QueueService queue.ActiveInternalQueue
 var BUFFER_SIZE = 64 * 1024
 
-var NextService = flag.String("a", "localhost:50555", "Address of the next service in the pipeline")
-var ServicePort = flag.String("p", "", "port that will be exposed to receive the frames")
+var NextService = flag.String("next", "localhost:50555", "Address of the next service in the pipeline")
+var ExternalPort = flag.String("p", "", "port that will be exposed to receive the frames")
+var SidecarAddress = flag.String("sidecar", "localhost:50505", "address of the sidecar service")
 var isEntrypoint = flag.Bool("entry", false, "If True, this is an entrypoint, and frames will be received from the UDP socket")
 var isExitpoint = flag.Bool("exit", false, "If True, this is an exitpoint, no next service will be used, but frames will be sent back to the client using the client address")
 var thershold = flag.Int("ms", 200, "Threshold in milliseconds, number of milliseconds after which a frame is considered obsolete and is discarded")
@@ -39,7 +40,7 @@ func main() {
 	generatedQueue := make(chan queue.ActiveInternalQueue, 0)
 	framesChan := make(chan element.Element, 5)
 	//starting queue sidecar
-	go startQueueClient(quit, generatedQueue, 50505, framesChan)
+	go startQueueClient(quit, generatedQueue, framesChan)
 	queueObject := <-generatedQueue
 	//starting processing and forwarding gRPC client
 	go ProcessOutgoingFrames(framesChan, queueObject.Dequeue)
@@ -61,9 +62,8 @@ func main() {
 
 // ### Queue Service ####
 
-func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveInternalQueue, port int, forwardChan chan element.Element) {
-	target := fmt.Sprintf("localhost:%d", port)
-	clientConn, err := grpc.Dial(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveInternalQueue, forwardChan chan element.Element) {
+	clientConn, err := grpc.Dial(*SidecarAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -197,7 +197,11 @@ func ReceiveFrameGrpcRoutine() {
 	restart := func() {
 		go ReceiveFrameGrpcRoutine()
 	}
-	serverListener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", 50505))
+	port, err := strconv.Atoi(*ExternalPort)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -241,7 +245,7 @@ func (s StreamServer) StreamFrames(frame *streamgRPCspec.StreamFrame, stream str
 
 func ReceiveUDPFrameRoutine() {
 	buffer := make([]byte, BUFFER_SIZE)
-	port, err := strconv.Atoi(*ServicePort)
+	port, err := strconv.Atoi(*ExternalPort)
 	if err != nil {
 		log.Fatal(err)
 	}
