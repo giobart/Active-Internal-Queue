@@ -202,6 +202,13 @@ func (q *Queue) Dequeue() {
 		q.analyticsService.NotifyDeletion(returnElement.Timestamp)
 	}
 
+	//if threshold requirements not met discard element
+	isThresholdValid := checkAndUpdateThreshold(returnElement)
+	if !isThresholdValid {
+		defer q.Dequeue()
+		return
+	}
+
 	// async call to dequeue function
 	q.callDequeueFunction(returnElement)
 
@@ -224,4 +231,15 @@ func checkElement(el element.Element) error {
 		return errors.New("empty element id")
 	}
 	return nil
+}
+
+func checkAndUpdateThreshold(el *element.Element) bool {
+	if el.ThresholdRequirement.Type == element.MaxLatency {
+		totLatency := el.ThresholdRequirement.Current + float64((time.Now().UnixNano()-el.Timestamp)/int64(time.Millisecond))
+		el.ThresholdRequirement.Current = totLatency
+		if totLatency > el.ThresholdRequirement.Threshold {
+			return false
+		}
+	}
+	return true
 }

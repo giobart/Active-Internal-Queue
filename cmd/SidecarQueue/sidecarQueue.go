@@ -12,7 +12,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -23,6 +26,7 @@ var NextService = flag.String("a", "localhost:50555", "Address of the next servi
 var ServicePort = flag.String("p", "", "port that will be exposed to receive the frames")
 var isEntrypoint = flag.Bool("entry", false, "If True, this is an entrypoint, and frames will be received from the UDP socket")
 var isExitpoint = flag.Bool("exit", false, "If True, this is an exitpoint, no next service will be used, but frames will be sent back to the client using the client address")
+var thershold = flag.Int("ms", 200, "Threshold in milliseconds, number of milliseconds after which a frame is considered obsolete and is discarded")
 
 type StreamServer struct {
 	streamgRPCspec.UnimplementedFramesStreamServiceServer
@@ -36,9 +40,9 @@ func main() {
 	framesChan := make(chan element.Element, 5)
 	//starting queue sidecar
 	go startQueueClient(quit, generatedQueue, 50505, framesChan)
-	queue := <-generatedQueue
+	queueObject := <-generatedQueue
 	//starting processing and forwarding gRPC client
-	go ProcessOutgoingFrames(framesChan, queue.Dequeue)
+	go ProcessOutgoingFrames(framesChan, queueObject.Dequeue)
 	if *isEntrypoint {
 		//if this service is an entrypoint, then receive the frames directly from the client using UDP
 		go ReceiveUDPFrameRoutine()
@@ -46,6 +50,12 @@ func main() {
 		//starting receive gRPC routine
 		go ReceiveFrameGrpcRoutine()
 	}
+
+	//blocking until SIGINT or SIGTERM
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
+	fmt.Println("Blocking, press ctrl+c to continue...")
+	<-done // Will block here until user hits ctrl+c
 
 }
 
@@ -76,7 +86,7 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 			Client:               r.Client,
 			Id:                   r.Id,
 			QoS:                  0,
-			ThresholdRequirement: element.Threshold{},
+			ThresholdRequirement: el.ThresholdRequirement,
 			Timestamp:            0,
 			Data:                 r.Data,
 		}
@@ -152,7 +162,17 @@ func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 	}
 	for true {
 		frame := <-frames
-		err := stream.SendMsg(frame)
+		err := stream.SendMsg(streamgRPCspec.StreamFrame{
+			Client: frame.Client,
+			Id:     frame.Id,
+			Qos:    "",
+			Data:   frame.Data,
+			Threshold: &streamgRPCspec.StreamFrameThreshold{
+				Type:      "ms",
+				Current:   float32(frame.ThresholdRequirement.Current),
+				Threshold: float32(frame.ThresholdRequirement.Threshold),
+			},
+		})
 		if err != nil {
 			log.Println("Unable to send frame to next service: ", nextService)
 			return
@@ -165,7 +185,7 @@ func NextServiceConnect(nextService string, ctx context.Context) (streamgRPCspec
 	gRPCclient := streamgRPCspec.NewFramesStreamServiceClient(clientConn)
 	var stream streamgRPCspec.FramesStreamService_StreamFramesClient = nil
 	if err == nil {
-		stream, err = gRPCclient.StreamFrames(ctx, &streamgRPCspec.Frame{})
+		stream, err = gRPCclient.StreamFrames(ctx, &streamgRPCspec.StreamFrame{})
 	}
 	return stream, err
 }
@@ -193,14 +213,25 @@ func ReceiveFrameGrpcRoutine() {
 	defer restart()
 }
 
-func (s StreamServer) StreamFrames(frame *streamgRPCspec.Frame, stream streamgRPCspec.FramesStreamService_StreamFramesServer) error {
+func (s StreamServer) StreamFrames(frame *streamgRPCspec.StreamFrame, stream streamgRPCspec.FramesStreamService_StreamFramesServer) error {
 	for true {
-		nextFrame := element.Element{}
+		nextFrame := streamgRPCspec.StreamFrame{}
 		err := stream.RecvMsg(&nextFrame)
 		if err != nil {
 			return err
 		}
-		err = QueueService.Enqueue(nextFrame)
+		err = QueueService.Enqueue(element.Element{
+			Client:    nextFrame.Client,
+			Id:        nextFrame.Id,
+			QoS:       0,
+			Timestamp: 0,
+			ThresholdRequirement: element.Threshold{
+				Type:      element.MaxLatency,
+				Threshold: float64(nextFrame.Threshold.GetThreshold()),
+				Current:   float64(nextFrame.Threshold.GetCurrent()),
+			},
+			Data: nextFrame.Data,
+		})
 		if err != nil {
 			return err
 		}
@@ -232,11 +263,15 @@ func ReceiveUDPFrameRoutine() {
 		data := make([]byte, n)
 		copy(data, buffer[:n])
 		frame := element.Element{
-			Client:               from.String(),
-			Id:                   "1",
-			QoS:                  0,
-			ThresholdRequirement: element.Threshold{},
-			Data:                 data,
+			Client: from.String(),
+			Id:     "1",
+			QoS:    0,
+			ThresholdRequirement: element.Threshold{
+				Type:      element.MaxLatency,
+				Threshold: float64(*thershold),
+				Current:   0,
+			},
+			Data: data,
 		}
 		err = QueueService.Enqueue(frame)
 		if err != nil {
