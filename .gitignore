@@ -15,5 +15,5 @@
 # vendor/
 
 discord.xml
-
+.idea
 bin/
