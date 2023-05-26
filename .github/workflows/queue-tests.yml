@@ -22,6 +22,6 @@ jobs:
           go get -u ./...
 
       - name: Run test suite
-        working-directory: pkg/queue
+        working-directory: pkg
         run: |
-          go test .
+          go test ./...
