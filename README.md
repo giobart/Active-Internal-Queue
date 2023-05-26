@@ -1,6 +1,6 @@
 # AIQ-Active-Internal-Queue
-A Simple Internal Queue library for Go to support latency sensitive tasks 
 
+A Simple Go Library to define an Internal Queue for latency critical tasks.
 
 ![Arch](img/arch.jpg)
 
