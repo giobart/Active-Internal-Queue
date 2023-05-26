@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         working-directory: .
         run: |
-          go get -u
+          go get -u ./...
 
       - name: Run test suite
         working-directory: pkg/queue
