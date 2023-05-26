@@ -40,10 +40,7 @@ func (f *fifo) Pop(queue *[]*element.Element) (*element.Element, error) {
 
 func (f *fifo) Delete(index int, queue *[]*element.Element) error {
 	size := len(*queue)
-	if index >= size {
-		return errors.New("out of bound")
-	}
-	if index >= f.start || index <= f.end {
+	if (index >= f.start || index <= f.end) && index >= 0 && index <= size {
 		(*queue)[index] = nil
 
 		for i := 0; i <= f.count; i++ {
@@ -57,7 +54,6 @@ func (f *fifo) Delete(index int, queue *[]*element.Element) error {
 		}
 
 		return nil
-	} else {
-		return errors.New("out of range")
 	}
+	return errors.New("out of range")
 }

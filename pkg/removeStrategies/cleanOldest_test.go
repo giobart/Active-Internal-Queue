@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+func TestFifo_InvalidStrategy(t *testing.T) {
+	_, err := RemoveStrategySelector(Custom)
+	if err == nil {
+		t.Error("Strategy not declared, it should throw an error")
+	}
+}
+
 func TestCleanOldest_FindVictim(t *testing.T) {
 	queue := make([]*element.Element, 20)
 	cleanStrategy, _ := RemoveStrategySelector(CleanOldest)

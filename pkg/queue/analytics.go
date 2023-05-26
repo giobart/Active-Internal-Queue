@@ -116,8 +116,4 @@ func (a *Analytics) addDeleted() {
 
 func (a *Analytics) NotifyThreshold() {
 	a.totThreshold++
-	if a.totThreshold > a.windowSize {
-		a.totDeleted = a.totDeleted / 2
-		a.totThreshold = a.totThreshold / 2
-	}
 }

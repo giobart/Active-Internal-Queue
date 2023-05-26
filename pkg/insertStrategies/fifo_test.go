@@ -1,10 +1,19 @@
 package insertStrategies
 
 import (
+	"errors"
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
+	"log"
 	"strconv"
 	"testing"
 )
+
+func TestFifo_InvalidStrategy(t *testing.T) {
+	_, err := InsertStrategySelector(Custom)
+	if err == nil {
+		t.Error("Strategy not declared, it should throw an error")
+	}
+}
 
 func TestFifo_Push(t *testing.T) {
 	queue := make([]*element.Element, 20)
@@ -233,6 +242,86 @@ func TestFifo_Delete2(t *testing.T) {
 	result, err = strategy.Pop(&queue)
 	if err == nil {
 		t.Fatal("Should be empty")
+	}
+
+}
+
+func TestFifo_Delete_outOfBound(t *testing.T) {
+	queue := make([]*element.Element, 20)
+	strategy, _ := InsertStrategySelector(FIFO)
+	for i := 0; i < 13; i++ {
+		currentElement := element.Element{
+			Client:               strconv.Itoa(i),
+			Id:                   strconv.Itoa(i),
+			QoS:                  0,
+			ThresholdRequirement: element.Threshold{},
+			Timestamp:            0,
+			Data:                 []byte("test"),
+		}
+		err := strategy.Push(&currentElement, &queue)
+		if err != nil {
+			if i < 20 {
+				t.Error("The queue has size 20, it should not be full")
+				t.Fatal(err)
+			}
+		}
+	}
+
+	//removing element wit id out of bound
+	err := strategy.Delete(100, &queue)
+	if err == nil {
+		t.Error(err, "Should throw an out of bound error")
+	}
+
+	//removing element wit id out of bound
+	err = strategy.Delete(-1, &queue)
+	if err == nil {
+		t.Error(err, "Should throw an out of bound error")
+	}
+
+}
+
+func TestFifo_Full(t *testing.T) {
+	queue := make([]*element.Element, 0)
+	strategy, _ := InsertStrategySelector(FIFO)
+	for i := 0; i < 10; i++ {
+		// Adding elements
+		currentElement := element.Element{
+			Client:               strconv.Itoa(i),
+			Id:                   strconv.Itoa(i),
+			QoS:                  0,
+			ThresholdRequirement: element.Threshold{},
+			Timestamp:            0,
+			Data:                 []byte("test"),
+		}
+		err := strategy.Push(&currentElement, &queue)
+		if err == nil {
+			log.Fatalln("It should be full")
+		}
+		if err != nil {
+			errors.Is(err, &FullQueue{})
+			if err.Error() != "Full Queue" {
+				log.Fatalln("It should be Full Queue")
+			}
+		}
+	}
+}
+
+func TestFifo_Empty(t *testing.T) {
+	queue := make([]*element.Element, 20)
+	strategy, _ := InsertStrategySelector(FIFO)
+
+	for i := 0; i < 20; i++ {
+		_, err := strategy.Pop(&queue)
+		if err == nil {
+			t.Fatal("Should be empty")
+		}
+		if err != nil {
+			errors.Is(err, &EmptyQueue{})
+			if err.Error() != "Empty Queue" {
+				log.Fatalln("It should be Empty Queue")
+			}
+		}
 	}
 
 }
