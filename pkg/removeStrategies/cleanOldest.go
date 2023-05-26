@@ -7,6 +7,10 @@ import (
 
 type cleanOldest struct{}
 
+func (c *cleanOldest) New() RemoveStrategyActuator {
+	return &cleanOldest{}
+}
+
 func (c *cleanOldest) FindVictim(queue *[]*element.Element) (int, error) {
 	oldest := -1
 	oldestTimestamp := int64(0)

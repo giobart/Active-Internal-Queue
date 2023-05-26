@@ -152,7 +152,7 @@ func TestFifo_Delete(t *testing.T) {
 	}
 
 	if result.Id != "1" {
-		t.Error("First element should be 1, current element is: ", result)
+		t.Error("First element should be 1, current element is: ", result.Id)
 		t.Fatal(err)
 	}
 
@@ -213,7 +213,7 @@ func TestFifo_Delete2(t *testing.T) {
 	}
 
 	if result.Id != "0" {
-		t.Error("First element should be 1, current element is: ", result)
+		t.Error("First element should be 1, current element is: ", result.Id)
 		t.Fatal(err)
 	}
 

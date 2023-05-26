@@ -16,13 +16,18 @@ func main() {
 		finish <- true
 	}
 
-	myQueue, _ := queue.New(dequeueCallback, queue.OptionSetAnalyticsService(20))
+	myQueue, _ := queue.New(dequeueCallback)
 
 	//QUEUE 10 ELEMENTS
 	for i := 0; i < 10; i++ {
 		err := myQueue.Enqueue(element.Element{
 			Id:   fmt.Sprintf("%d", i),
 			Data: []byte("Hello World"),
+			ThresholdRequirement: element.Threshold{
+				Type:      element.MaxLatency,
+				Threshold: 200, //latency in ms
+				Current:   0,   //You can initialize the current cumulative latency or leave it empty
+			},
 		})
 		if err != nil {
 			log.Fatal(err)
@@ -38,9 +43,4 @@ func main() {
 	for i := 0; i < 5; i++ {
 		<-finish
 	}
-
-	analytics := myQueue.GetAnalytics()
-	fmt.Printf("AvgPermanence: %dns\n", analytics.AvgPermanenceTime)
-	fmt.Printf("SpaceUsage: %d%%\n", analytics.SpaceFull)
-	fmt.Printf("EnqueueDeququeRatio: %d\n", analytics.EnqueueDequeueRatio)
 }

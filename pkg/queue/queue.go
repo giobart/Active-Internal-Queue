@@ -62,6 +62,17 @@ func OptionQueueInsertStrategy(strategy insertStrategies.InsertStrategy) func(*Q
 	}
 }
 
+func OptionQueueRemoveStrategy(strategy removeStrategies.RemoveStrategy) func(*Queue) error {
+	return func(q *Queue) error {
+		selector, err := removeStrategies.RemoveStrategySelector(strategy)
+		if err != nil {
+			return err
+		}
+		q.removeStrategy = selector
+		return nil
+	}
+}
+
 func OptionMinDequeue(minDequeue int) func(queue *Queue) error {
 	return func(q *Queue) error {
 		q.minDequeue = minDequeue

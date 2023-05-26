@@ -9,16 +9,21 @@ type RemoveStrategy int
 
 const (
 	CleanOldest RemoveStrategy = iota
+	Custom      RemoveStrategy = iota
 )
+
+var RemoveStrategyMap = map[RemoveStrategy]RemoveStrategyActuator{
+	CleanOldest: &cleanOldest{},
+}
 
 type RemoveStrategyActuator interface {
 	FindVictim(queue *[]*element.Element) (int, error)
+	New() RemoveStrategyActuator
 }
 
 func RemoveStrategySelector(s RemoveStrategy) (RemoveStrategyActuator, error) {
-	switch s {
-	case CleanOldest:
-		return &cleanOldest{}, nil
+	if actuator, exist := RemoveStrategyMap[s]; exist && actuator != nil {
+		return actuator.New(), nil
 	}
-	return nil, errors.New("strategy supported")
+	return nil, errors.New("strategy not supported")
 }

@@ -11,6 +11,10 @@ type fifo struct {
 	count int
 }
 
+func (f *fifo) New() PushPopStrategyActuator {
+	return &fifo{start: 0, end: 0}
+}
+
 func (f *fifo) Push(el *element.Element, queue *[]*element.Element) error {
 	size := len(*queue)
 	if f.end == f.start && f.count == size {
