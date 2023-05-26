@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"fmt"
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
 	"log"
 	"strconv"
@@ -131,5 +132,30 @@ func TestQueue_ThresholdLatency(t *testing.T) {
 	analytics := myQueue.GetAnalytics()
 	if analytics.ThresholdRatio != 0.5 {
 		log.Fatalln("Threshold ratio should be 0.5, current ratio: ", analytics.ThresholdRatio)
+	}
+}
+
+func TestQueue_SimpleExample(t *testing.T) {
+	dequeueCallback := func(el *element.Element) {
+		//DO SOMETHING HERE WITH THE MESSAGE
+		fmt.Println(el)
+	}
+
+	myQueue, _ := New(dequeueCallback)
+
+	//QUEUE 10 ELEMENTS
+	for i := 0; i < 10; i++ {
+		err := myQueue.Enqueue(element.Element{
+			Id:   fmt.Sprintf("%d", i),
+			Data: []byte("test"),
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	//ASK DEQUEUE 10 TIMES
+	for i := 0; i < 10; i++ {
+		myQueue.Dequeue()
 	}
 }

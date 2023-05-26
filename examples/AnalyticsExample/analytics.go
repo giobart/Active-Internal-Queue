@@ -1,13 +1,5 @@
-# AIQ-Active-Internal-Queue
-A Simple Internal Queue library for Go to support latency sensitive tasks 
+package main
 
-
-![Arch](img/arch.jpg)
-
-
-# HelloWorld Example
-
-```go
 import (
 	"fmt"
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
@@ -21,11 +13,10 @@ func main() {
 
 	dequeueCallback := func(el *element.Element) {
 		//DO SOMETHING HERE WITH THE MESSAGE
-		fmt.Println(string(el.Data[:]))
 		finish <- true
 	}
 
-	myQueue, _ := queue.New(dequeueCallback)
+	myQueue, _ := queue.New(dequeueCallback, queue.OptionSetAnalyticsService(20))
 
 	//QUEUE 10 ELEMENTS
 	for i := 0; i < 10; i++ {
@@ -47,18 +38,7 @@ func main() {
 	for i := 0; i < 5; i++ {
 		<-finish
 	}
+
+	analytics := myQueue.GetAnalytics()
+	fmt.Printf("AvgPermanence: %dns\nSpaceUsage: %d%%\nEnqueueDeququeRatio: %d\n", analytics.AvgPermanenceTime, analytics.SpaceFull, analytics.EnqueueDequeueRatio)
 }
-```
-
-In this example we initialized a queue with the callback function `dequeueCallback`.
-Then we inserted 10 elements and asked for a dequeue 5 times. As a result the callback is called 5 times.
-
-The result will look something like this:
-
-```
-Hello World
-Hello World
-Hello World
-Hello World
-Hello World
-```
