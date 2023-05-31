@@ -60,7 +60,7 @@ func main() {
 	//blocking until SIGINT or SIGTERM
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
-	fmt.Println("Blocking, press ctrl+c to continue...")
+	fmt.Println("Blocking, press ctrl+c to kill the sidecar...")
 	<-done // Will block here until user hits ctrl+c
 
 }
