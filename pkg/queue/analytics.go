@@ -5,10 +5,10 @@ import (
 )
 
 type Analytics struct {
-	AvgPermanenceTime        int64   //expressed in milliseconds
-	EnqueueDequeueRatio      int     //<1 dequeue faster than enqueue, ==1 balanced, >1 enqueue faster than dequeue
-	SpaceFull                int     //0-100% value expressing the space lect
-	ThresholdRatio           float64 //0-1 value representing (N.Thresholded values/Tot number of deletion)
+	AvgPermanenceTime        int64   `json:"AvgPermanenceTime"`   //expressed in milliseconds
+	EnqueueDequeueRatio      int     `json:"EnqueueDequeueRatio"` //<1 dequeue faster than enqueue, ==1 balanced, >1 enqueue faster than dequeue
+	SpaceFull                int     `json:"SpaceFull"`           //0-100% value expressing the space lect
+	ThresholdRatio           float64 `json:"ThresholdRatio"`      //0-1 value representing (N.Thresholded values/Tot number of deletion)
 	deltaInsertionTime       []int64
 	deltaPermanenceTime      []int64
 	avgDeltaInsertionTime    int64
@@ -85,7 +85,11 @@ func (a *Analytics) GetAnalytics() Analytics {
 	}
 
 	//calc threshold
-	a.ThresholdRatio = float64(float64(a.totThreshold) / float64(a.totDeleted))
+	if a.totDeleted == 0 {
+		a.ThresholdRatio = 0
+	} else {
+		a.ThresholdRatio = float64(float64(a.totThreshold) / float64(a.totDeleted))
+	}
 
 	return *a
 }

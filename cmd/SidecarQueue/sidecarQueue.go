@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/giobart/Active-Internal-Queue/cmd/SidecarQueue/streamgRPCspec"
@@ -23,11 +24,12 @@ var QueueService queue.ActiveInternalQueue
 var BUFFER_SIZE = 64 * 1024
 
 var NextService = flag.String("next", "localhost:50555", "Address of the next service in the pipeline")
-var ExternalPort = flag.String("p", "", "port that will be exposed to receive the frames")
+var ExternalPort = flag.String("p", "50506", "port that will be exposed to receive the frames")
 var SidecarAddress = flag.String("sidecar", "localhost:50505", "address of the sidecar service")
 var isEntrypoint = flag.Bool("entry", false, "If True, this is an entrypoint, and frames will be received from the UDP socket")
 var isExitpoint = flag.Bool("exit", false, "If True, this is an exitpoint, no next service will be used, but frames will be sent back to the client using the client address")
 var thershold = flag.Int("ms", 200, "Threshold in milliseconds, number of milliseconds after which a frame is considered obsolete and is discarded")
+var analyticsTimer = flag.Float64("analytics", 0, "How often the analytics service will gather the information. The value refers to How many seconds to wait between one query and another. ")
 
 type StreamServer struct {
 	streamgRPCspec.UnimplementedFramesStreamServiceServer
@@ -52,12 +54,33 @@ func main() {
 		go ReceiveFrameGrpcRoutine()
 	}
 
+	//starting analytics routine
+	go collectAnalytics(queueObject)
+
 	//blocking until SIGINT or SIGTERM
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
 	fmt.Println("Blocking, press ctrl+c to continue...")
 	<-done // Will block here until user hits ctrl+c
 
+}
+
+// ### Analytics
+func collectAnalytics(queue queue.ActiveInternalQueue) {
+	if *analyticsTimer == 0 {
+		return
+	}
+	timerDuration := time.Second * time.Duration(*analyticsTimer)
+	for true {
+		select {
+		case <-time.After(timerDuration):
+			analytics := queue.GetAnalytics()
+			jsonanalytics, err := json.Marshal(analytics)
+			if err == nil {
+				log.Printf("%d;%s;%s;%s;\n", time.Now().UnixMilli(), "QUEUE", "analytics", fmt.Sprintf("{analytics:%s}", string(jsonanalytics)))
+			}
+		}
+	}
 }
 
 // ### Queue Service ####
