@@ -3,4 +3,4 @@ LABEL org.opencontainers.image.source https://github.com/giobart/Active-Internal
 
 ADD bin .
 
-CMD ["./bin/SidecarQueue","-entry","true","-exit","true","-p","5000",]
+CMD ["./bin/SidecarQueue","-entry","true","-exit","true","-p","5000"]
