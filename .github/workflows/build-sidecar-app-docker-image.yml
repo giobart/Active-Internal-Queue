@@ -1,4 +1,4 @@
-name: Docker Active-Sidecar-Queue
+name: Docker Dummy App
 
 on:
   push:
