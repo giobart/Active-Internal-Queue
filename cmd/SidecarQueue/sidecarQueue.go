@@ -130,7 +130,6 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 
 func ProcessOutgoingFrames(frames chan element.Element, dequeue func()) {
 	sendFramesChan := make(chan element.Element, 10)
-
 	if *isExitpoint {
 		// if this is the expitpoint the frames must be sent to the UDP socket instead of the gRPC channel for the next service
 		go SendFramesToClientRoutine(sendFramesChan)
