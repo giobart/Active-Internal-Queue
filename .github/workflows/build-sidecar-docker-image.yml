@@ -37,9 +37,9 @@ jobs:
           cosign-release: 'v1.13.1'
 
       - name: Set up Go
-          uses: actions/setup-go@v4
-          with:
-            go-version: '1.19'
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.19'
 
       - name: Build
           run: go build -o cmd/SidecarQueue/bin/SidecarQueue cmd/SidecarQueue/sidecarQueue.go
