@@ -57,6 +57,7 @@ func main() {
 	//starting analytics routine
 	go collectAnalytics(QueueService)
 
+	QueueService.Dequeue()
 	//blocking until SIGINT or SIGTERM
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
@@ -86,16 +87,16 @@ func collectAnalytics(queue queue.ActiveInternalQueue) {
 // ### Queue Service ####
 
 func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveInternalQueue, forwardChan chan element.Element) {
-	clientConn, err := grpc.Dial(*SidecarAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	clientConn, err := grpc.Dial(*SidecarAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 
 	gRPCclient := gRPCspec.NewQueueServiceClient(clientConn)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	deqFunc := func(el *element.Element) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		r, err := gRPCclient.NextFrame(ctx, &gRPCspec.Frame{
 			Client: el.Client,
 			Id:     el.Id,
@@ -103,7 +104,7 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 			Data:   el.Data,
 		})
 		if err != nil {
-			log.Println("Unable to process Next Frame!")
+			log.Println("Unable to process Next Frame: ", err)
 		}
 		forwardChan <- element.Element{
 			Client:               r.Client,
@@ -113,6 +114,7 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 			Timestamp:            0,
 			Data:                 r.Data,
 		}
+		cancel()
 	}
 
 	myQueue, _ := queue.New(
@@ -123,7 +125,7 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 
 	generatedQueue <- myQueue
 	<-quit
-	cancel()
+
 }
 
 // ### Forward frames to next service ####
@@ -148,7 +150,7 @@ func SendFramesToClientRoutine(frames chan element.Element) {
 	for true {
 		frame := <-frames
 		connection, exist := connectionBuffer[frame.Client]
-		if !exist {
+		if !exist || connection == nil {
 			raddr, err := net.ResolveUDPAddr("udp", frame.Client)
 			if err != nil {
 				log.Println("Unable to send udp packet")
@@ -164,28 +166,26 @@ func SendFramesToClientRoutine(frames chan element.Element) {
 		_, _, err := (*connection).WriteMsgUDP(frame.Data, nil, nil)
 		if err != nil {
 			connectionBuffer[frame.Client] = nil
-			log.Println("Unable to complete udp write to packet")
+			log.Println("Unable to complete udp write to packet to ", frame.Client)
 			continue
 		}
 	}
 }
 
 func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
 	//in case of failure just reboot the function in a new goroutine and try to connect again to the next service
 	defer func() {
 		time.Sleep(time.Second)
 		go SendFrameGrpcRoutine(nextService, frames)
 	}()
-	stream, err := NextServiceConnect(nextService, ctx)
+	stream, err := NextServiceConnect(nextService)
 	if err != nil {
 		log.Println("Unable to connect to next service: ", nextService)
 		return
 	}
 	for true {
 		frame := <-frames
-		err := stream.SendMsg(streamgRPCspec.StreamFrame{
+		err := stream.Send(&streamgRPCspec.StreamFrame{
 			Client: frame.Client,
 			Id:     frame.Id,
 			Qos:    "",
@@ -197,18 +197,19 @@ func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 			},
 		})
 		if err != nil {
-			log.Println("Unable to send frame to next service: ", nextService)
+			log.Println("Unable to send frame to next service: ", nextService, err)
 			return
 		}
 	}
 }
 
-func NextServiceConnect(nextService string, ctx context.Context) (streamgRPCspec.FramesStreamService_StreamFramesClient, error) {
-	clientConn, err := grpc.Dial(nextService, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func NextServiceConnect(nextService string) (streamgRPCspec.FramesStreamService_StreamFramesClient, error) {
+	clientConn, err := grpc.Dial(nextService, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithReturnConnectionError())
 	gRPCclient := streamgRPCspec.NewFramesStreamServiceClient(clientConn)
 	var stream streamgRPCspec.FramesStreamService_StreamFramesClient = nil
 	if err == nil {
-		stream, err = gRPCclient.StreamFrames(ctx, &streamgRPCspec.StreamFrame{})
+		ctx := context.Background()
+		stream, err = gRPCclient.StreamFrames(ctx)
 	}
 	return stream, err
 }
@@ -240,11 +241,11 @@ func ReceiveFrameGrpcRoutine() {
 	defer restart()
 }
 
-func (s StreamServer) StreamFrames(frame *streamgRPCspec.StreamFrame, stream streamgRPCspec.FramesStreamService_StreamFramesServer) error {
+func (s StreamServer) StreamFrames(stream streamgRPCspec.FramesStreamService_StreamFramesServer) error {
 	for true {
-		nextFrame := streamgRPCspec.StreamFrame{}
-		err := stream.RecvMsg(&nextFrame)
+		nextFrame, err := stream.Recv()
 		if err != nil {
+			log.Println(err)
 			return err
 		}
 		err = QueueService.Enqueue(element.Element{

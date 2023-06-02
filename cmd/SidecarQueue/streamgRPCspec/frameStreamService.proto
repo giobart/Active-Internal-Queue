@@ -5,7 +5,7 @@ option go_package = "./streamgRPCspec";
 // The service definition exposed by the AR application.
 service FramesStreamService {
   // NextFrame send the next frame
-  rpc StreamFrames(StreamFrame) returns (stream StreamFrame) {}
+  rpc StreamFrames(stream StreamFrame) returns (StreamFrame) {}
 }
 
 // Threshold type

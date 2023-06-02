@@ -23,7 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FramesStreamServiceClient interface {
 	// NextFrame send the next frame
-	StreamFrames(ctx context.Context, in *StreamFrame, opts ...grpc.CallOption) (FramesStreamService_StreamFramesClient, error)
+	StreamFrames(ctx context.Context, opts ...grpc.CallOption) (FramesStreamService_StreamFramesClient, error)
 }
 
 type framesStreamServiceClient struct {
@@ -34,23 +34,18 @@ func NewFramesStreamServiceClient(cc grpc.ClientConnInterface) FramesStreamServi
 	return &framesStreamServiceClient{cc}
 }
 
-func (c *framesStreamServiceClient) StreamFrames(ctx context.Context, in *StreamFrame, opts ...grpc.CallOption) (FramesStreamService_StreamFramesClient, error) {
+func (c *framesStreamServiceClient) StreamFrames(ctx context.Context, opts ...grpc.CallOption) (FramesStreamService_StreamFramesClient, error) {
 	stream, err := c.cc.NewStream(ctx, &FramesStreamService_ServiceDesc.Streams[0], "/FramesStreamService/StreamFrames", opts...)
 	if err != nil {
 		return nil, err
 	}
 	x := &framesStreamServiceStreamFramesClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
 	return x, nil
 }
 
 type FramesStreamService_StreamFramesClient interface {
-	Recv() (*StreamFrame, error)
+	Send(*StreamFrame) error
+	CloseAndRecv() (*StreamFrame, error)
 	grpc.ClientStream
 }
 
@@ -58,7 +53,14 @@ type framesStreamServiceStreamFramesClient struct {
 	grpc.ClientStream
 }
 
-func (x *framesStreamServiceStreamFramesClient) Recv() (*StreamFrame, error) {
+func (x *framesStreamServiceStreamFramesClient) Send(m *StreamFrame) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *framesStreamServiceStreamFramesClient) CloseAndRecv() (*StreamFrame, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
 	m := new(StreamFrame)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -71,7 +73,7 @@ func (x *framesStreamServiceStreamFramesClient) Recv() (*StreamFrame, error) {
 // for forward compatibility
 type FramesStreamServiceServer interface {
 	// NextFrame send the next frame
-	StreamFrames(*StreamFrame, FramesStreamService_StreamFramesServer) error
+	StreamFrames(FramesStreamService_StreamFramesServer) error
 	mustEmbedUnimplementedFramesStreamServiceServer()
 }
 
@@ -79,7 +81,7 @@ type FramesStreamServiceServer interface {
 type UnimplementedFramesStreamServiceServer struct {
 }
 
-func (UnimplementedFramesStreamServiceServer) StreamFrames(*StreamFrame, FramesStreamService_StreamFramesServer) error {
+func (UnimplementedFramesStreamServiceServer) StreamFrames(FramesStreamService_StreamFramesServer) error {
 	return status.Errorf(codes.Unimplemented, "method StreamFrames not implemented")
 }
 func (UnimplementedFramesStreamServiceServer) mustEmbedUnimplementedFramesStreamServiceServer() {}
@@ -96,15 +98,12 @@ func RegisterFramesStreamServiceServer(s grpc.ServiceRegistrar, srv FramesStream
 }
 
 func _FramesStreamService_StreamFrames_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(StreamFrame)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(FramesStreamServiceServer).StreamFrames(m, &framesStreamServiceStreamFramesServer{stream})
+	return srv.(FramesStreamServiceServer).StreamFrames(&framesStreamServiceStreamFramesServer{stream})
 }
 
 type FramesStreamService_StreamFramesServer interface {
-	Send(*StreamFrame) error
+	SendAndClose(*StreamFrame) error
+	Recv() (*StreamFrame, error)
 	grpc.ServerStream
 }
 
@@ -112,8 +111,16 @@ type framesStreamServiceStreamFramesServer struct {
 	grpc.ServerStream
 }
 
-func (x *framesStreamServiceStreamFramesServer) Send(m *StreamFrame) error {
+func (x *framesStreamServiceStreamFramesServer) SendAndClose(m *StreamFrame) error {
 	return x.ServerStream.SendMsg(m)
+}
+
+func (x *framesStreamServiceStreamFramesServer) Recv() (*StreamFrame, error) {
+	m := new(StreamFrame)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // FramesStreamService_ServiceDesc is the grpc.ServiceDesc for FramesStreamService service.
@@ -127,7 +134,7 @@ var FramesStreamService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamFrames",
 			Handler:       _FramesStreamService_StreamFrames_Handler,
-			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "frameStreamService.proto",
