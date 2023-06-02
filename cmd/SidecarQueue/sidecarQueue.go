@@ -87,7 +87,9 @@ func collectAnalytics(queue queue.ActiveInternalQueue) {
 // ### Queue Service ####
 
 func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveInternalQueue, forwardChan chan element.Element) {
+	log.Println("Waiting for sidecar service connection...")
 	clientConn, err := grpc.Dial(*SidecarAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	log.Println("Sidecar CONNECTED! Initializing queue...")
 
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -105,6 +107,7 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 		})
 		if err != nil {
 			log.Println("Unable to process Next Frame: ", err)
+			<-quit
 		}
 		forwardChan <- element.Element{
 			Client:               r.Client,
@@ -197,6 +200,7 @@ func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 			},
 		})
 		if err != nil {
+			_ = stream.CloseSend()
 			log.Println("Unable to send frame to next service: ", nextService, err)
 			return
 		}
@@ -208,8 +212,7 @@ func NextServiceConnect(nextService string) (streamgRPCspec.FramesStreamService_
 	gRPCclient := streamgRPCspec.NewFramesStreamServiceClient(clientConn)
 	var stream streamgRPCspec.FramesStreamService_StreamFramesClient = nil
 	if err == nil {
-		ctx := context.Background()
-		stream, err = gRPCclient.StreamFrames(ctx)
+		stream, err = gRPCclient.StreamFrames(context.Background())
 	}
 	return stream, err
 }
