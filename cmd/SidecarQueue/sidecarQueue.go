@@ -43,9 +43,9 @@ func main() {
 	framesChan := make(chan element.Element, 5)
 	//starting queue sidecar
 	go startQueueClient(quit, generatedQueue, framesChan)
-	queueObject := <-generatedQueue
+	QueueService = <-generatedQueue
 	//starting processing and forwarding gRPC client
-	go ProcessOutgoingFrames(framesChan, queueObject.Dequeue)
+	go ProcessOutgoingFrames(framesChan, QueueService.Dequeue)
 	if *isEntrypoint {
 		//if this service is an entrypoint, then receive the frames directly from the client using UDP
 		go ReceiveUDPFrameRoutine()
@@ -55,7 +55,7 @@ func main() {
 	}
 
 	//starting analytics routine
-	go collectAnalytics(queueObject)
+	go collectAnalytics(QueueService)
 
 	//blocking until SIGINT or SIGTERM
 	done := make(chan os.Signal, 1)

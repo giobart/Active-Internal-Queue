@@ -3,4 +3,4 @@ LABEL org.opencontainers.image.source https://github.com/giobart/Active-Internal
 
 ADD ./bin/ home/
 
-CMD ["/bin/bash","-c","/home/app & /home/SidecarQueue -entry true -exit true -p 5000"]
+CMD ["/bin/bash","-c","/home/app & /home/SidecarQueue -entry=true -exit=true -p=50001"]
