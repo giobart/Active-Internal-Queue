@@ -113,9 +113,9 @@ jobs:
         run: echo "${{ steps.meta.outputs.tags }}-ubuntu22" | xargs -I {} cosign sign {}@${{ steps.build-and-push-ubuntu.outputs.digest }}
 
       - name: Sign the published Docker image cuda
-          if: ${{ github.event_name != 'pull_request' }}
-          env:
-            COSIGN_EXPERIMENTAL: "true"
-          # This step uses the identity token to provision an ephemeral certificate
-          # against the sigstore community Fulcio instance.
-          run: echo "${{ steps.meta.outputs.tags }}-cuda22" | xargs -I {} cosign sign {}@${{ steps.build-and-push-cuda.outputs.digest }}
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        # This step uses the identity token to provision an ephemeral certificate
+        # against the sigstore community Fulcio instance.
+        run: echo "${{ steps.meta.outputs.tags }}-cuda22" | xargs -I {} cosign sign {}@${{ steps.build-and-push-cuda.outputs.digest }}

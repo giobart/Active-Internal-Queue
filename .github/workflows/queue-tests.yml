@@ -1,4 +1,4 @@
-name: Node Net Manager Test
+name: Queue Tests
 
 on: push
 
