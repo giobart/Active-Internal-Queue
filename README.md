@@ -1,5 +1,5 @@
 # AIQ-Active-Internal-Queue
-![Coverage](https://img.shields.io/badge/Coverage-96.7%25-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-92.2%25-brightgreen)
 
 A Simple Go Library to define an Internal Queue for latency critical tasks.
 
