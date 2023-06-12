@@ -87,7 +87,7 @@ func collectAnalytics(queue queue.ActiveInternalQueue) {
 // ### Queue Service ####
 
 func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveInternalQueue, forwardChan chan element.Element) {
-	log.Println("Waiting for sidecar service connection...")
+	log.Println("Waiting for sidecar service connection...", *SidecarAddress)
 	clientConn, err := grpc.Dial(*SidecarAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	log.Println("Sidecar CONNECTED! Initializing queue...")
 

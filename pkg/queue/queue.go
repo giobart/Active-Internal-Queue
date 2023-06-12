@@ -153,6 +153,11 @@ func (q *Queue) Enqueue(el element.Element) error {
 	if q.daqueueWaiting > 0 {
 		q.daqueueWaiting--
 		q.callDequeueFunction(&el)
+		if q.analyticsService != nil {
+			//notify quick insertion deletion for analytics purposes
+			q.analyticsService.NotifyInsertion()
+			q.analyticsService.NotifyDeletion(el.Timestamp)
+		}
 		return nil
 	}
 

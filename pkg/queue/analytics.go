@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"sync"
 	"time"
 )
 
@@ -9,6 +10,12 @@ type Analytics struct {
 	EnqueueDequeueRatio      int     `json:"EnqueueDequeueRatio"` //<1 dequeue faster than enqueue, ==1 balanced, >1 enqueue faster than dequeue
 	SpaceFull                int     `json:"SpaceFull"`           //0-100% value expressing the space lect
 	ThresholdRatio           float64 `json:"ThresholdRatio"`      //0-1 value representing (N.Thresholded values/Tot number of deletion)
+	EPSIn                    float64 `json:"ElementPerSecondIn"`
+	EPSOut                   float64 `json:"ElementPerSecondOut"`
+	ePSInCounter             int
+	ePSOutCounter            int
+	ePSInLock                sync.RWMutex
+	ePSOutLock               sync.RWMutex
 	deltaInsertionTime       []int64
 	deltaPermanenceTime      []int64
 	avgDeltaInsertionTime    int64
@@ -31,7 +38,7 @@ type AnalyticsGenerator interface {
 
 // NewAnalyticsGenerator create new analytics structure with window size
 func NewAnalyticsGenerator(windowSize int) *Analytics {
-	return &Analytics{
+	analyticsService := &Analytics{
 		AvgPermanenceTime:   0,
 		EnqueueDequeueRatio: 0,
 		SpaceFull:           0,
@@ -40,25 +47,55 @@ func NewAnalyticsGenerator(windowSize int) *Analytics {
 		maxQueueSize:        0,
 		windowSize:          windowSize,
 	}
+	go analyticsService.countEPS()
+	return analyticsService
+}
+
+func (a *Analytics) countEPS() {
+
+	for true {
+		select {
+		case <-time.After(time.Second):
+			a.ePSInLock.Lock()
+			a.ePSOutLock.Lock()
+			a.EPSIn = float64(a.EPSIn)*0.9 + float64(a.ePSInCounter)*0.1
+			a.EPSOut = float64(a.EPSOut)*0.9 + float64(a.ePSOutCounter)*0.1
+			a.ePSInCounter = 0
+			a.ePSOutCounter = 0
+			a.ePSInLock.Unlock()
+			a.ePSOutLock.Unlock()
+		}
+	}
+
 }
 
 // NotifyInsertion used no
 func (a *Analytics) NotifyInsertion() {
+	//update insertion time window
 	now := time.Now().UnixNano()
 	if a.lastInsertionTime != 0 {
 		a.deltaInsertionTime[a.nextInsertionTimeIndex] = now - a.lastInsertionTime
 		a.nextInsertionTimeIndex = (a.nextInsertionTimeIndex + 1) % len(a.deltaInsertionTime)
 	}
 	a.lastInsertionTime = now
+	//update EPS counter
+	a.ePSInLock.Lock()
+	a.ePSInCounter += 1
+	a.ePSInLock.Unlock()
 }
 
 // NotifyDeletion used to notify that an item was removed from the queue.
 // It requires the former insertion time to keep track of the avg permanence time in the queue
 func (a *Analytics) NotifyDeletion(previousInsertionTime int64) {
+	//update permanence time window
 	deltaPermanenceTime := time.Now().UnixNano() - previousInsertionTime
 	a.deltaPermanenceTime[a.nextDeltaPermanenceIndex] = deltaPermanenceTime
 	a.nextDeltaPermanenceIndex = (a.nextDeltaPermanenceIndex + 1) % len(a.deltaPermanenceTime)
 	a.addDeleted()
+	//update EPS counter
+	a.ePSOutLock.Lock()
+	a.ePSOutCounter += 1
+	a.ePSOutLock.Unlock()
 }
 
 func (a *Analytics) NotifyCurrentSpace(numberOfStoredElements int, maxSize int) {
