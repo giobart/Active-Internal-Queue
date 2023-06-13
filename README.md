@@ -1,5 +1,5 @@
 # AIQ-Active-Internal-Queue
-![Coverage](https://img.shields.io/badge/Coverage-92.2%25-brightgreen) [![Queue Tests](https://github.com/giobart/Active-Internal-Queue/actions/workflows/queue-tests.yml/badge.svg)](https://github.com/giobart/Active-Internal-Queue/actions/workflows/queue-tests.yml)
+![Coverage](https://img.shields.io/badge/Coverage-92.2%25-brightgreen)
 
 A Simple Go Library to define an Internal Queue for latency critical tasks.
 
