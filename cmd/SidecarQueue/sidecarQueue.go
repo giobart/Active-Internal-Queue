@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/giobart/Active-Internal-Queue/cmd/SidecarQueue/requests"
 	"github.com/giobart/Active-Internal-Queue/cmd/SidecarQueue/streamgRPCspec"
 	"github.com/giobart/Active-Internal-Queue/pkg/element"
 	"github.com/giobart/Active-Internal-Queue/pkg/gRPCspec"
@@ -30,6 +31,7 @@ var isEntrypoint = flag.Bool("entry", false, "If True, this is an entrypoint, an
 var isExitpoint = flag.Bool("exit", false, "If True, this is an exitpoint, no next service will be used, but frames will be sent back to the client using the client address")
 var thershold = flag.Int("ms", 200, "Threshold in milliseconds, number of milliseconds after which a frame is considered obsolete and is discarded")
 var analyticsTimer = flag.Float64("analytics", 0, "How often the analytics service will gather the information. The value refers to How many seconds to wait between one query and another. ")
+var monitor = flag.String("monitor", "", "External monitor service for Application Aware Orchestration. Only works if service collects analytics.")
 
 type StreamServer struct {
 	streamgRPCspec.UnimplementedFramesStreamServiceServer
@@ -72,13 +74,20 @@ func collectAnalytics(queue queue.ActiveInternalQueue) {
 		return
 	}
 	timerDuration := time.Second * time.Duration(*analyticsTimer)
+	// collect analytics
 	for true {
 		select {
 		case <-time.After(timerDuration):
 			analytics := queue.GetAnalytics()
 			jsonanalytics, err := json.Marshal(analytics)
 			if err == nil {
-				log.Printf("%d;%s;%s;%s;\n", time.Now().UnixMilli(), "QUEUE", "analytics", fmt.Sprintf("{analytics:%s}", string(jsonanalytics)))
+				body := string(jsonanalytics)
+				log.Printf("%d;%s;%s;%s;\n", time.Now().UnixMilli(), "QUEUE", "analytics", fmt.Sprintf("{analytics:%s}", body))
+				// If monitor service configured, forward the analytics
+				if *monitor != "" {
+					log.Println("Forwarding analytics to monitor service.")
+					go requests.SendAnalytics(body, *monitor)
+				}
 			}
 		}
 	}
