@@ -82,7 +82,7 @@ jobs:
           context: ./cmd/SidecarQueue/
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.version }}-ubuntu22
+          tags: giobart/active-internal-queue/active-sidecar-queue:${{ steps.meta.outputs.version }}-ubuntu22
           labels: ${{ steps.meta.outputs.labels }}
           target: ubuntu22
 
@@ -95,7 +95,7 @@ jobs:
           context: ./cmd/SidecarQueue/
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.version }}}-cuda12
+          tags: giobart/active-internal-queue/active-sidecar-queue:${{ steps.meta.outputs.version }}}-cuda12
           labels: ${{ steps.meta.outputs.labels }}
           target: cuda12
 
