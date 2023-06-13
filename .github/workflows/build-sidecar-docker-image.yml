@@ -82,7 +82,7 @@ jobs:
           context: ./cmd/SidecarQueue/
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}-ubuntu22
+          tags: ${{ steps.meta.outputs.tags[0] }}-ubuntu22
           labels: ${{ steps.meta.outputs.labels }}
           target: ubuntu22
 
@@ -95,7 +95,7 @@ jobs:
           context: ./cmd/SidecarQueue/
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}-cuda12
+          tags: ${{ steps.meta.outputs.tags[0] }}-cuda12
           labels: ${{ steps.meta.outputs.labels }}
           target: cuda12
 
