@@ -18,6 +18,7 @@ type StreamServer struct {
 var ExternalPort = flag.String("p", "50505", "port that will be exposed to receive the frames")
 
 func main() {
+	flag.Parse()
 	port, err := strconv.Atoi(*ExternalPort)
 	if err != nil {
 		log.Fatalf("%v", err)

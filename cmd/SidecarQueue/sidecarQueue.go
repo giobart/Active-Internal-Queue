@@ -217,7 +217,12 @@ func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 }
 
 func NextServiceConnect(nextService string) (streamgRPCspec.FramesStreamService_StreamFramesClient, error) {
-	clientConn, err := grpc.Dial(nextService, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithReturnConnectionError())
+	clientConn, err := grpc.Dial(
+		nextService,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithReturnConnectionError(),
+		grpc.WithInitialWindowSize(1024*1024),
+	)
 	gRPCclient := streamgRPCspec.NewFramesStreamServiceClient(clientConn)
 	var stream streamgRPCspec.FramesStreamService_StreamFramesClient = nil
 	if err == nil {
