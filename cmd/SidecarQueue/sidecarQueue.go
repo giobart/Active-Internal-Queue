@@ -221,7 +221,7 @@ func NextServiceConnect(nextService string) (streamgRPCspec.FramesStreamService_
 		nextService,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithReturnConnectionError(),
-		grpc.WithInitialWindowSize(1024*1024),
+		grpc.WithInitialWindowSize(1024*1024*200),
 	)
 	gRPCclient := streamgRPCspec.NewFramesStreamServiceClient(clientConn)
 	var stream streamgRPCspec.FramesStreamService_StreamFramesClient = nil
