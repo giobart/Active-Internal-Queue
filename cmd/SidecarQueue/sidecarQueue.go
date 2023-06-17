@@ -247,7 +247,7 @@ func ReceiveFrameGrpcRoutine() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(grpc.MaxRecvMsgSize(100*102*1024), grpc.MaxSendMsgSize(1024*1024*100)) //100MB max size
 	streamgRPCspec.RegisterFramesStreamServiceServer(s, StreamServer{})
 	if err := s.Serve(serverListener); err != nil {
 		log.Println("gRPC server error")
