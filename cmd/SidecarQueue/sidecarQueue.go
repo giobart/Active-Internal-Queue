@@ -120,8 +120,8 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 			<-quit
 		}
 		forwardChan <- element.Element{
-			Client:               r.Client,
-			Id:                   r.Id,
+			Client:               el.Client,
+			Id:                   el.Id,
 			QoS:                  0,
 			ThresholdRequirement: el.ThresholdRequirement,
 			Timestamp:            0,
