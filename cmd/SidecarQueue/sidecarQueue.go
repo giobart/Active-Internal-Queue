@@ -32,6 +32,7 @@ var isExitpoint = flag.Bool("exit", false, "If True, this is an exitpoint, no ne
 var thershold = flag.Int("ms", 200, "Threshold in milliseconds, number of milliseconds after which a frame is considered obsolete and is discarded")
 var analyticsTimer = flag.Float64("analytics", 0, "How often the analytics service will gather the information. The value refers to How many seconds to wait between one query and another. ")
 var monitor = flag.String("monitor", "", "External monitor service for Application Aware Orchestration. Only works if service collects analytics.")
+var debug = flag.Bool("debug", false, "Debug mode")
 
 type StreamServer struct {
 	streamgRPCspec.UnimplementedFramesStreamServiceServer
@@ -197,6 +198,9 @@ func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 	}
 	for true {
 		frame := <-frames
+		if *debug {
+			log.Println("DEBUG: {", frame.Client, frame.Id, frame.QoS, frame.Data, "}")
+		}
 		err := stream.Send(&streamgRPCspec.StreamFrame{
 			Client: frame.Client,
 			Id:     frame.Id,
@@ -265,6 +269,9 @@ func (s StreamServer) StreamFrames(stream streamgRPCspec.FramesStreamService_Str
 			log.Println(err)
 			return err
 		}
+		if *debug {
+			log.Println("DEBUG: {", nextFrame.Client, nextFrame.Id, nextFrame.Qos, nextFrame.Data, "}")
+		}
 		err = QueueService.Enqueue(element.Element{
 			Client:    nextFrame.Client,
 			Id:        nextFrame.Id,
@@ -278,6 +285,7 @@ func (s StreamServer) StreamFrames(stream streamgRPCspec.FramesStreamService_Str
 			Data: nextFrame.Data,
 		})
 		if err != nil {
+			log.Println(err)
 			return err
 		}
 	}
