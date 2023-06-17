@@ -109,6 +109,14 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 
 	deqFunc := func(el *element.Element) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		result := element.Element{
+			Client:               el.Client,
+			Id:                   el.Id,
+			QoS:                  0,
+			ThresholdRequirement: el.ThresholdRequirement,
+			Timestamp:            0,
+			Data:                 el.Data,
+		}
 		r, err := gRPCclient.NextFrame(ctx, &gRPCspec.Frame{
 			Client: el.Client,
 			Id:     el.Id,
@@ -119,14 +127,8 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 			log.Println("Unable to process Next Frame: ", err)
 			<-quit
 		}
-		forwardChan <- element.Element{
-			Client:               el.Client,
-			Id:                   el.Id,
-			QoS:                  0,
-			ThresholdRequirement: el.ThresholdRequirement,
-			Timestamp:            0,
-			Data:                 r.Data,
-		}
+		result.Data = r.Data
+		forwardChan <- result
 		cancel()
 	}
 
