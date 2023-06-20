@@ -33,6 +33,7 @@ var thershold = flag.Int("ms", 200, "Threshold in milliseconds, number of millis
 var analyticsTimer = flag.Float64("analytics", 0, "How often the analytics service will gather the information. The value refers to How many seconds to wait between one query and another. ")
 var monitor = flag.String("monitor", "", "External monitor service for Application Aware Orchestration. Only works if service collects analytics.")
 var debug = flag.Bool("debug", false, "Debug mode")
+var parallelOutStream = flag.Int("parallel", 1, "Number of parallel output streams")
 
 type StreamServer struct {
 	streamgRPCspec.UnimplementedFramesStreamServiceServer
@@ -151,7 +152,9 @@ func ProcessOutgoingFrames(frames chan element.Element, dequeue func()) {
 		// if this is the expitpoint the frames must be sent to the UDP socket instead of the gRPC channel for the next service
 		go SendFramesToClientRoutine(sendFramesChan)
 	} else {
-		go SendFrameGrpcRoutine(*NextService, sendFramesChan)
+		for i := 0; i < *parallelOutStream; i++ {
+			go SendFrameGrpcRoutine(*NextService, sendFramesChan)
+		}
 	}
 	for true {
 		frame := <-frames
@@ -190,7 +193,6 @@ func SendFramesToClientRoutine(frames chan element.Element) {
 func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 	//in case of failure just reboot the function in a new goroutine and try to connect again to the next service
 	defer func() {
-		time.Sleep(time.Second)
 		go SendFrameGrpcRoutine(nextService, frames)
 	}()
 	stream, err := NextServiceConnect(nextService)
@@ -198,7 +200,8 @@ func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 		log.Println("Unable to connect to next service: ", nextService)
 		return
 	}
-	for true {
+	i_max := 300
+	for i := 0; i < i_max; i++ {
 		frame := <-frames
 		if *debug {
 			log.Println("DEBUG: {", frame.Client, frame.Id, frame.QoS, frame.Data, "}")
@@ -214,9 +217,9 @@ func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 				Threshold: float32(frame.ThresholdRequirement.Threshold),
 			},
 		})
-		if err != nil {
+		if err != nil || i == (i_max-1) {
 			_ = stream.CloseSend()
-			log.Println("Unable to send frame to next service: ", nextService, err)
+			log.Println("Stream Closed ", nextService, err)
 			return
 		}
 	}
