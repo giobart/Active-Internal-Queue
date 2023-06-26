@@ -34,6 +34,7 @@ var analyticsTimer = flag.Float64("analytics", 0, "How often the analytics servi
 var monitor = flag.String("monitor", "", "External monitor service for Application Aware Orchestration. Only works if service collects analytics.")
 var debug = flag.Bool("debug", false, "Debug mode")
 var parallelOutStream = flag.Int("parallel", 1, "Number of parallel output streams")
+var qsize = flag.Int("qsize", 5, "Queue Size")
 
 type StreamServer struct {
 	streamgRPCspec.UnimplementedFramesStreamServiceServer
@@ -135,8 +136,8 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 
 	myQueue, _ := queue.New(
 		deqFunc,
-		queue.OptionSetAnalyticsService(100),
-		queue.OptionQueueLength(100),
+		queue.OptionSetAnalyticsService(50),
+		queue.OptionQueueLength(*qsize),
 	)
 
 	generatedQueue <- myQueue
@@ -275,9 +276,10 @@ func (s StreamServer) StreamFrames(stream streamgRPCspec.FramesStreamService_Str
 			return err
 		}
 		if *debug {
-			log.Println("DEBUG: {", nextFrame.Client, nextFrame.Id, nextFrame.Qos, nextFrame.Data, nextFrame.Threshold.Current, "}")
+			log.Println("DEBUG: {", nextFrame.Client, nextFrame.Id, nextFrame.Qos, nextFrame.Threshold.Current, "}")
 		}
 		if nextFrame.Threshold.Current >= nextFrame.Threshold.Threshold {
+			log.Println("DEBUG: { thresholded frame }")
 			continue
 		}
 		err = QueueService.Enqueue(element.Element{

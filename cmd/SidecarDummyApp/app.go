@@ -39,5 +39,9 @@ func main() {
 }
 
 func (*StreamServer) NextFrame(ctx context.Context, in *gRPCspec.Frame) (*gRPCspec.Frame, error) {
+	in.Data = append(in.Data, in.Data...)
+	in.Data = append(in.Data, in.Data...)
+	in.Data = append(in.Data, in.Data...)
+	in.Data = append(in.Data, in.Data...)
 	return in, nil
 }
