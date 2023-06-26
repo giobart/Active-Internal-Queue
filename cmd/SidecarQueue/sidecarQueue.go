@@ -275,7 +275,10 @@ func (s StreamServer) StreamFrames(stream streamgRPCspec.FramesStreamService_Str
 			return err
 		}
 		if *debug {
-			log.Println("DEBUG: {", nextFrame.Client, nextFrame.Id, nextFrame.Qos, nextFrame.Data, "}")
+			log.Println("DEBUG: {", nextFrame.Client, nextFrame.Id, nextFrame.Qos, nextFrame.Data, nextFrame.Threshold.Current, "}")
+		}
+		if nextFrame.Threshold.Current >= nextFrame.Threshold.Threshold {
+			continue
 		}
 		err = QueueService.Enqueue(element.Element{
 			Client:    nextFrame.Client,
