@@ -161,10 +161,10 @@ func ProcessOutgoingFrames(frames chan element.Element, dequeue func()) {
 	for true {
 		frame := <-frames
 		dequeue()
-		if len(clientSendFramesChan) == cap(clientSendFramesChan) {
+		if len(clientSendFramesChan) < cap(clientSendFramesChan) {
 			clientSendFramesChan <- frame
 		}
-		if len(sendFramesChan) == cap(sendFramesChan) {
+		if len(sendFramesChan) < cap(sendFramesChan) {
 			sendFramesChan <- frame
 		}
 	}
