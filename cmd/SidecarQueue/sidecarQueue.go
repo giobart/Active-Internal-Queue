@@ -24,11 +24,11 @@ import (
 var QueueService queue.ActiveInternalQueue
 var BUFFER_SIZE = 64 * 1024
 
-var NextService = flag.String("next", "localhost:50555", "Address of the next service in the pipeline")
+var NextService = flag.String("next", "", "Address of the next service in the pipeline")
 var ExternalPort = flag.String("p", "50506", "port that will be exposed to receive the frames")
 var SidecarAddress = flag.String("sidecar", "localhost:50505", "address of the sidecar service")
 var isEntrypoint = flag.Bool("entry", false, "If True, this is an entrypoint, and frames will be received from the UDP socket")
-var isExitpoint = flag.Bool("exit", false, "If True, this is an exitpoint, no next service will be used, but frames will be sent back to the client using the client address")
+var isExitpoint = flag.Bool("exit", false, "If True, this is an exitpoint, frames will be sent back to the client using the client address, if NextService is specified, the frames will be forwarded there as well")
 var thershold = flag.Int("ms", 200, "Threshold in milliseconds, number of milliseconds after which a frame is considered obsolete and is discarded")
 var analyticsTimer = flag.Float64("analytics", 0, "How often the analytics service will gather the information. The value refers to How many seconds to wait between one query and another. ")
 var monitor = flag.String("monitor", "", "External monitor service for Application Aware Orchestration. Only works if service collects analytics.")
@@ -45,7 +45,7 @@ func main() {
 	flag.Parse()
 	quit := make(chan bool, 0)
 	generatedQueue := make(chan queue.ActiveInternalQueue, 0)
-	framesChan := make(chan element.Element, 5)
+	framesChan := make(chan element.Element, 2)
 	//starting queue sidecar
 	go startQueueClient(quit, generatedQueue, framesChan)
 	QueueService = <-generatedQueue
@@ -145,14 +145,15 @@ func startQueueClient(quit <-chan bool, generatedQueue chan<- queue.ActiveIntern
 
 }
 
-// ### Forward frames to next service ####
-
+// ### Forward frames to next service and/or output service####
 func ProcessOutgoingFrames(frames chan element.Element, dequeue func()) {
 	sendFramesChan := make(chan element.Element, 10)
+	clientSendFramesChan := make(chan element.Element, 10)
 	if *isExitpoint {
 		// if this is the expitpoint the frames must be sent to the UDP socket instead of the gRPC channel for the next service
-		go SendFramesToClientRoutine(sendFramesChan)
-	} else {
+		go SendFramesToClientRoutine(clientSendFramesChan)
+	}
+	if *NextService != "" {
 		for i := 0; i < *parallelOutStream; i++ {
 			go SendFrameGrpcRoutine(*NextService, sendFramesChan)
 		}
@@ -160,7 +161,12 @@ func ProcessOutgoingFrames(frames chan element.Element, dequeue func()) {
 	for true {
 		frame := <-frames
 		dequeue()
-		sendFramesChan <- frame
+		if len(clientSendFramesChan) == cap(clientSendFramesChan) {
+			clientSendFramesChan <- frame
+		}
+		if len(sendFramesChan) == cap(sendFramesChan) {
+			sendFramesChan <- frame
+		}
 	}
 }
 
@@ -193,10 +199,12 @@ func SendFramesToClientRoutine(frames chan element.Element) {
 
 func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 	//in case of failure just reboot the function in a new goroutine and try to connect again to the next service
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer func() {
+		cancel()
 		go SendFrameGrpcRoutine(nextService, frames)
 	}()
-	stream, err := NextServiceConnect(nextService)
+	stream, err := NextServiceConnect(nextService, ctx)
 	if err != nil {
 		log.Println("Unable to connect to next service: ", nextService)
 		return
@@ -226,8 +234,9 @@ func SendFrameGrpcRoutine(nextService string, frames chan element.Element) {
 	}
 }
 
-func NextServiceConnect(nextService string) (streamgRPCspec.FramesStreamService_StreamFramesClient, error) {
-	clientConn, err := grpc.Dial(
+func NextServiceConnect(nextService string, ctx context.Context) (streamgRPCspec.FramesStreamService_StreamFramesClient, error) {
+	clientConn, err := grpc.DialContext(
+		ctx,
 		nextService,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithReturnConnectionError(),
@@ -236,7 +245,7 @@ func NextServiceConnect(nextService string) (streamgRPCspec.FramesStreamService_
 	gRPCclient := streamgRPCspec.NewFramesStreamServiceClient(clientConn)
 	var stream streamgRPCspec.FramesStreamService_StreamFramesClient = nil
 	if err == nil {
-		stream, err = gRPCclient.StreamFrames(context.Background())
+		stream, err = gRPCclient.StreamFrames(ctx)
 	}
 	return stream, err
 }
